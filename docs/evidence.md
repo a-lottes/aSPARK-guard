@@ -103,10 +103,24 @@ Proven there:
 claude plugin validate .    # ✔ Validation passed
 ```
 
-**Not proven:** installation through `claude plugin install aspark-guard@aspark`. The
-marketplace entry in `a-lottes/aSPARK` points at a GitHub source, and this repository
-has not been pushed, so that path cannot resolve yet. It is the one step of the M5
-definition of done that is blocked on publishing, not on code.
+### Published and re-verified from GitHub, 2026-09-11
+
+The repository is public at `a-lottes/aSPARK-guard` (`v0.1.0`), and the marketplace entry
+naming it is on `a-lottes/aSPARK`'s `main`. Verified from a clone rather than from the
+working copy:
+
+```bash
+git clone https://github.com/a-lottes/aSPARK-guard.git
+cd aSPARK-guard && python3 -m unittest discover -s tests -t tests   # 142 tests, OK
+claude plugin validate .                                            # ✔ Validation passed
+```
+
+So what is published is complete and runs on its own.
+
+**Still not exercised:** `claude plugin install aspark-guard@aspark` in a live session.
+The source now resolves and the manifests validate, but installing changes the behaviour
+of every subsequent session on that machine, so it is the user's call to make rather
+than something to verify in passing.
 
 ---
 
