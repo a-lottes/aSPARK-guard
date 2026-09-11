@@ -117,10 +117,36 @@ claude plugin validate .                                            # ✔ Valida
 
 So what is published is complete and runs on its own.
 
-**Still not exercised:** `claude plugin install aspark-guard@aspark` in a live session.
-The source now resolves and the manifests validate, but installing changes the behaviour
-of every subsequent session on that machine, so it is the user's call to make rather
-than something to verify in passing.
+### Installed from the marketplace, 2026-09-11
+
+```bash
+claude plugin marketplace update aspark
+claude plugin install aspark-guard@aspark
+claude plugin list          # aspark-guard@aspark · 0.1.0 · user · ✔ enabled
+```
+
+The installed copy lands at
+`~/.claude/plugins/cache/<marketplace>/<plugin>/<version>/` — the plugin root is
+**versioned**, so `${CLAUDE_PLUGIN_ROOT}` resolves to `…/aspark-guard/0.1.0`, not to
+`…/aspark-guard`.
+
+Its own four hook commands were then run through a shell against a throwaway project,
+from that installed path rather than from a checkout:
+
+| Event | exit | stderr | result |
+|---|---:|---|---|
+| `PostToolUse` | 0 | empty | ledger created: `.spark/demo/spec.md \| draft \| 0efb43869413 \| product-owner` |
+| `PreToolUse` | 0 | empty | `deny` — *a plan may not be written while the spec is not approved* |
+| `SessionStart` | 0 | empty | silent (nothing to report) |
+| `SubagentStop` | 0 | empty | silent |
+
+That closes the M5 definition of done: **installed from the marketplace into a project
+that had nothing set up, and working, with no further configuration.**
+
+**Still not exercised:** the hooks firing inside a live Claude Code session. Plugins
+activate on session start, so a session already running when the plugin was installed
+does not yet carry them. Everything above drives the same commands the harness would,
+but by hand.
 
 ---
 

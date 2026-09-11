@@ -38,7 +38,8 @@ what is missing is field evidence, not mechanism.**
 | **M5** Release | Installation proven from the manifest's own command lines; full-cycle test; `docs/evidence.md` | **Built** |
 
 Both guarantees hold for the three rules below, proven by 142 tests and replayed over
-22 real gated artifacts without a false positive.
+22 real gated artifacts without a false positive. Installed from the marketplace and
+verified working on 2026-09-11 — see [`docs/evidence.md`](docs/evidence.md) §4.
 
 **The one gap that matters:** none of this has run a full feature loop on a project that
 isn't this author's — the same gap aSPARK Core names at the top of its own roadmap, for
