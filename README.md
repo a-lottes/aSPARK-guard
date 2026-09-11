@@ -26,21 +26,80 @@ Core is not modified. Nothing here runs unless a project has a `.spark/` directo
 
 ## Status
 
-**This is `0.0.1`. Two of six milestones are built.**
+**This is `0.0.2`. Three of six milestones are built.**
 
 | Milestone | What it does | State |
 |---|---|---|
 | **M0** Skeleton | Plugin manifest, four wired hooks, payload parsing, the silence and fail-open invariants | **Built** |
 | **M1** Ledger + drift check | Every `.spark/` write recorded with its SHA-256 and status; artifacts edited outside the loop reported at session start | **Built** |
-| **M2** Gate guard | Rules R1–R3 deny writes that violate a phase precondition | Not built — `pre-tool-use` allows everything |
-| **M3** Override mechanics | R4 plus hash-bound override entries | Not built |
+| **M2** Gate guard | Rules R1–R3 deny writes that violate a phase precondition | **Built** |
+| **M3** Override mechanics | R4 plus hash-bound override entries | Not built — the only way past a rule today is `warn`/`off` in the config |
 | **M4** Template validator + trail | Form drift warnings; agent-run trail | Not built — `subagent-stop` is inert |
 | **M5** Release | README, marketplace entry, `0.1.0` | Not built |
 
-So today the plugin **observes and reports; it does not yet block anything.** That is
-worth having on its own — the ledger is what makes "`spec.md` was approved when
-`plan.md` was written" checkable instead of merely plausible — but it is not yet the
-enforcement layer the intro describes.
+So guarantee 1 holds today for the three rules below. Guarantee 2 does not yet: until
+M3, a rule you disagree with is switched off in the config rather than overridden on
+the record.
+
+---
+
+## What it blocks
+
+Three rules, each derived from aSPARK's own artifact chain (`docs/workflow.md`:
+*"Each phase reads the artifact of the previous phase and refuses to start if the gate
+isn't met"*). The guard makes that refusal structural instead of instructional.
+
+| Rule | A write to… | is denied while… |
+|---|---|---|
+| `plan-requires-approved-spec` | `plan.md` | `spec.md` exists and is not `approved` |
+| `qa-requires-passed-review` | `qa.md` | `review.md` exists and is not `passed` |
+| `release-requires-green-gates` | `release.md` | `review.md` or `qa.md` is not `passed`, or `qa.md` still lists a Blocker whose status is exactly `open` |
+
+A denial names the rule, the state that triggered it, and the way forward:
+
+```
+aspark-guard: a release may not be written over a red gate.
+  rule:  release-requires-green-gates
+  state: .spark/weekly-stats/qa.md still lists 1 open Blocker(s): B1.
+  Close the gates first (/increment for the fixes, then /peer-review and /demo-day),
+  or record an abort by writing this release with status `aborted`.
+  If this rule does not fit this project, set it to "warn" or "off" under "rules" in
+  .spark/guard.json.
+```
+
+### What is deliberately *not* blocked
+
+Every one of these is a decision, not an oversight — and each is tested:
+
+- **A missing prerequisite.** "There is no spec" is indistinguishable from "this
+  project doesn't keep one", and aSPARK's skills already refuse to start without their
+  input. The guard enforces the *ordering* of a loop being run; it does not mandate
+  that the loop be run. `lean-rounds` in aSPARK's own repo is a released feature with
+  no `qa.md` at all.
+- **An unreadable status.** No parseable header table means no fact to act on.
+- **An abort record.** A `release.md` written with status `aborted` passes over red
+  gates. Refusing it would block the one artifact that documents why nothing shipped.
+- **Anything outside the three gated artifacts** — `spec.md` and `review.md` are inputs
+  to a gate, never subject to one; so are evidence notes, the constitution, and all your
+  source code.
+- **Severity or status wording the template doesn't define.** A Blocker counts as open
+  only when its status cell is exactly `open`, which is what the QA template requires
+  of every consumer: "a suffixed or renamed value silently drops the finding from every
+  open-findings view". Real artifacts carry severities like `Blocker → superseded` and
+  statuses like `fixed r6, reconfirmed r8`; neither is open.
+
+### Checking the rules against your own history
+
+```bash
+python3 /path/to/aSPARK-guard/bin/guard.py check .
+```
+
+Replays all three rules over every gated artifact already on disk, read-only. On a
+project whose features ran cleanly it prints nothing but a count — **every line it does
+print there is a false positive.** Run it before you trust the rules on a real project.
+
+Measured on this author's repos: `aSPARK` — 20 gated artifacts across 8 features,
+0 blocked. `aSPARK-graph` — 2 artifacts, 0 blocked.
 
 ---
 
@@ -127,11 +186,11 @@ Optional, at `.spark/guard.json`. Absent or malformed means these defaults:
   "drift_check": true,     // report outside edits     (M1)
   "trail": true,           // agent-run trail          (M4, inert)
   "template_check": true,  // template contract        (M4, inert)
-  "rules": {               // "block" | "warn" | "off" (M2/M3, inert)
+  "rules": {               // "block" | "warn" | "off"
     "plan-requires-approved-spec":  "block",
     "qa-requires-passed-review":    "block",
     "release-requires-green-gates": "block",
-    "overrides-are-human-only":     "block"
+    "overrides-are-human-only":     "block"   // M3, inert
   }
 }
 ```
@@ -153,8 +212,8 @@ Non-negotiable, and tested:
    40 ms is the Python interpreter starting up, not the guard working. That cost is
    paid on every `Write`/`Edit` in every project, including ones with no `.spark/`
    directory, and it is the honest price of the current design.
-4. **Never block silently.** Once M2 lands, every denial names the rule, the state that
-   triggered it, and both legitimate ways forward.
+4. **Never block silently.** Every denial names the rule, the state that triggered it,
+   and the way forward. A block with no way out only teaches people to route around it.
 5. **State and form only, never quality.** Anything requiring judgment belongs to the
    agents.
 6. **No network, no LLM, no dependency.**
@@ -172,7 +231,7 @@ runs for. The only subprocess it ever spawns is `git rev-parse --short HEAD`.
 python3 -m unittest discover -s tests -t tests
 ```
 
-48 tests, no dependencies, no network, no Claude Code required. Three layers:
+82 tests, no dependencies, no network, no Claude Code required. Three layers:
 
 - **Behaviour against fixtures** — one artifact state per fixture: draft, approved,
   uninstantiated template, broken header table.

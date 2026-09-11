@@ -27,15 +27,21 @@ class TestRecordedPayloads(GuardTestCase):
         super().setUp()
         self.make_spark_project()
 
-    def test_pre_tool_use_allows_silently_until_m2(self):
+    def test_pre_tool_use_denies_a_plan_written_against_a_draft_spec(self):
         self.write_fixture_artifact(".spark/weekly-stats/spec.md", "spec_draft.md")
-        self.write_artifact(".spark/weekly-stats/plan.md", "# Plan\n")
 
         code, out = self.run_hook("pre-tool-use", payload("pre_tool_use_write.json", self.root))
 
-        # M2 will deny this exact payload — a plan written against a draft spec.
         self.assertEqual(code, 0)
-        self.assertEqual(out, "")
+        decision = json.loads(out)["hookSpecificOutput"]
+        self.assertEqual(decision["permissionDecision"], "deny")
+        self.assertIn("plan-requires-approved-spec", decision["permissionDecisionReason"])
+
+    def test_the_same_payload_passes_once_the_spec_is_approved(self):
+        self.write_fixture_artifact(".spark/weekly-stats/spec.md", "spec_approved.md")
+
+        code, out = self.run_hook("pre-tool-use", payload("pre_tool_use_write.json", self.root))
+        self.assertEqual((code, out), (0, ""))
 
     def test_post_tool_use_records_an_edit(self):
         self.write_fixture_artifact(".spark/weekly-stats/spec.md", "spec_approved.md")
@@ -55,17 +61,20 @@ class TestRecordedPayloads(GuardTestCase):
         code, out = self.run_hook("session-start", payload("session_start.json", self.root))
         self.assertEqual((code, out), (0, ""))
 
-    def test_stdout_stays_empty_or_is_plain_text_never_stray_json(self):
-        # PreToolUse is the only event where stdout JSON carries meaning. Until M2
-        # emits a decision, nothing may print JSON that the harness would parse.
+    def test_only_pre_tool_use_ever_prints_json(self):
+        # PreToolUse is the one event where stdout JSON carries a decision. Any
+        # other event printing JSON would have it parsed as one.
+        self.write_fixture_artifact(".spark/weekly-stats/spec.md", "spec_draft.md")
         for name, command in (
-            ("pre_tool_use_write.json", "pre-tool-use"),
             ("post_tool_use_edit.json", "post-tool-use"),
             ("subagent_stop.json", "subagent-stop"),
         ):
             with self.subTest(event=command):
                 _, out = self.run_hook(command, payload(name, self.root))
                 self.assertFalse(out.strip().startswith("{"), out)
+
+        _, denial = self.run_hook("pre-tool-use", payload("pre_tool_use_write.json", self.root))
+        self.assertTrue(denial.strip().startswith("{"))
 
 
 class TestEntryPoint(GuardTestCase):
