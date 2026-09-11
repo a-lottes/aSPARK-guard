@@ -25,7 +25,7 @@ Core is not modified. Nothing here runs unless a project has a `.spark/` directo
 
 ## Status
 
-**This is `0.0.3`. Four of six milestones are built.**
+**This is `0.0.4`. Five of six milestones are built.**
 
 | Milestone | What it does | State |
 |---|---|---|
@@ -33,7 +33,7 @@ Core is not modified. Nothing here runs unless a project has a `.spark/` directo
 | **M1** Ledger + drift check | Every `.spark/` write recorded with its SHA-256 and status; artifacts edited outside the loop reported at session start | **Built** |
 | **M2** Gate guard | Rules R1–R3 deny writes that violate a phase precondition | **Built** |
 | **M3** Override mechanics | R4 plus hash-bound override entries | **Built** |
-| **M4** Template validator + trail | Form drift warnings; agent-run trail | Not built — `subagent-stop` is inert |
+| **M4** Template validator + trail | Form drift reported as context, never blocked; one trail line per finished subagent | **Built** |
 | **M5** Release | Field report from a real project, `0.1.0` | Not built |
 
 Both guarantees hold today for the three rules below. What is missing is not mechanism
@@ -141,13 +141,68 @@ approving, only from approving without saying why.
 
 ---
 
+## What it warns about
+
+aSPARK Core's constitution marks certain structures in `templates/` as **protected**,
+because the sibling repo `aspark-graph` parses artifacts shaped by them and raises
+`TemplateDriftError` on a mismatch — with no version handshake between the two
+(Core's ROADMAP: *Blocked — template-version-marker*). So drift surfaces late, in
+another repo, as a structural guess.
+
+The guard checks the same structures on the **producing** side, the moment an artifact
+is written, and reports through `additionalContext`. It never blocks — a form question
+is not worth a gate, and PostToolUse cannot deny anyway.
+
+| Artifact | Checked once the structure exists |
+|---|---|
+| `spec.md` | `### US-<n> (<MoSCoW>): <title>`, `- [ ] AC-<n>.<m>: <text>` |
+| `plan.md` | the `Task Breakdown` columns `#`, `Task`, `Story`, `Status`, `Definition of Done`; task ids `T<n>` |
+| `review.md` | the `Findings` columns `Severity`, `Location`, `Status`; finding ids `F<n>` |
+| `qa.md` | a verification table carrying `Spec ID` must also carry `Result` |
+| `release.md` | header rows `Status` and `Version` |
+
+Two rules keep it quiet enough to be worth having. **Drift, not completeness** — a
+structure is only checked once it has been started, so a spec with no stories yet is
+never nagged at. And **extra columns are fine**, which is the consumer's own rule:
+`plan.md` already ships two beyond the protected five.
+
+> **It found a real one on its first run.** Over aSPARK's own 44 artifacts it flagged
+> exactly one line — `- [ ] AC-2.1a:` in `.spark/situational-lenses/spec.md`. Checked
+> against `aspark-graph`'s `_AC_RE`, which requires `AC-<n>.<m>` immediately before the
+> colon: the suffixed id matches nothing, so that acceptance criterion is **invisible**
+> to every graph query. Not a false positive, and not a rule worth loosening.
+
+### The agent-run trail
+
+`SubagentStop` appends one line per finished subagent to `.spark/.guard/trail.jsonl`:
+
+```json
+{"ts":"2026-09-11T09:44:03Z","event":"agent_run","agent_type":"reviewer",
+ "agent_id":"sub-1","feature":"weekly-stats","stop_reason":"end_turn","session_id":"abc123"}
+```
+
+It exists because aSPARK's own metrics had to reach into Claude Code's session logs to
+count role-agent runs — the framework does not record them itself. A line per run makes
+that number come from the project.
+
+The agent's output is deliberately **not** recorded. `last_assistant_message` is in the
+payload and stays there: the purpose is counting runs, not transcribing work, and a log
+that quietly accumulates model output is a liability in a repo.
+
+`feature` is an inference, not an observation — a SubagentStop payload carries no file
+path, so it is taken from the last artifact this session wrote. Right in the ordinary
+case, null before the session has written anything.
+
+---
+
 ## Checking the rules against your own history
 
 ```bash
 python3 /path/to/aSPARK-guard/bin/guard.py check .
 ```
 
-Replays all three rules over every gated artifact already on disk, read-only. On a
+Replays all three gate rules over every gated artifact already on disk, read-only.
+`guard.py scan .` does the same for the template contract and the ledger. On a
 project whose features ran cleanly it prints nothing but a count — **every line it does
 print there is a false positive.** Run it before you trust the rules on a real project.
 
@@ -240,8 +295,8 @@ Optional, at `.spark/guard.json`. Absent or malformed means these defaults:
   "enabled": true,
   "ledger": true,          // record writes            (M1)
   "drift_check": true,     // report outside edits     (M1)
-  "trail": true,           // agent-run trail          (M4, inert)
-  "template_check": true,  // template contract        (M4, inert)
+  "trail": true,           // agent-run trail          (M4)
+  "template_check": true,  // template contract        (M4)
   "rules": {               // "block" | "warn" | "off"
     "plan-requires-approved-spec":  "block",
     "qa-requires-passed-review":    "block",
@@ -287,7 +342,7 @@ runs for. The only subprocess it ever spawns is `git rev-parse --short HEAD`.
 python3 -m unittest discover -s tests -t tests
 ```
 
-99 tests, no dependencies, no network, no Claude Code required. Three layers:
+129 tests, no dependencies, no network, no Claude Code required. Three layers:
 
 - **Behaviour against fixtures** — one artifact state per fixture: draft, approved,
   uninstantiated template, broken header table.
@@ -305,6 +360,8 @@ src/aspark_guard/
   ledger.py               the append-only chain
   drift.py                outside-edit detection
   overrides.py            reading, matching and suggesting override entries
+  templates.py            the protected template structures
+  trail.py                one line per finished subagent
   config.py               .spark/guard.json
   gitinfo.py              the one subprocess
 ```

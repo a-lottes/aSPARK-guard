@@ -61,20 +61,29 @@ class TestRecordedPayloads(GuardTestCase):
         code, out = self.run_hook("session-start", payload("session_start.json", self.root))
         self.assertEqual((code, out), (0, ""))
 
-    def test_only_pre_tool_use_ever_prints_json(self):
-        # PreToolUse is the one event where stdout JSON carries a decision. Any
-        # other event printing JSON would have it parsed as one.
+    def test_only_pre_tool_use_ever_carries_a_decision(self):
+        # PostToolUse may print JSON — the template check reports through
+        # additionalContext — but only PreToolUse may decide anything.
         self.write_fixture_artifact(".spark/weekly-stats/spec.md", "spec_draft.md")
-        for name, command in (
-            ("post_tool_use_edit.json", "post-tool-use"),
-            ("subagent_stop.json", "subagent-stop"),
-        ):
-            with self.subTest(event=command):
-                _, out = self.run_hook(command, payload(name, self.root))
-                self.assertFalse(out.strip().startswith("{"), out)
 
         _, denial = self.run_hook("pre-tool-use", payload("pre_tool_use_write.json", self.root))
-        self.assertTrue(denial.strip().startswith("{"))
+        self.assertEqual(
+            json.loads(denial)["hookSpecificOutput"]["permissionDecision"], "deny"
+        )
+
+        drifting = self.write_artifact(
+            ".spark/weekly-stats/spec.md",
+            "| **Status** | `draft` |\n\n- [ ] AC-2.1a: suffixed, so invisible.\n",
+        )
+        event = payload("post_tool_use_edit.json", self.root)
+        event["tool_input"]["file_path"] = str(drifting)
+        _, note = self.run_hook("post-tool-use", event)
+        specific = json.loads(note)["hookSpecificOutput"]
+        self.assertIn("additionalContext", specific)
+        self.assertNotIn("permissionDecision", specific)
+
+        _, quiet = self.run_hook("subagent-stop", payload("subagent_stop.json", self.root))
+        self.assertEqual(quiet, "")
 
 
 class TestEntryPoint(GuardTestCase):

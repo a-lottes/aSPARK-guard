@@ -15,7 +15,7 @@ import json
 import sys
 from pathlib import Path
 
-from . import artifacts, config, drift, ledger, overrides, rules
+from . import artifacts, config, drift, ledger, overrides, rules, templates, trail
 
 EVENTS = ("pre-tool-use", "post-tool-use", "subagent-stop", "session-start")
 
@@ -69,11 +69,11 @@ def _deny(reason: str) -> None:
     })
 
 
-def _note(context: str) -> None:
+def _note(context: str, event_name: str = "PreToolUse") -> None:
     """Allow, but put the finding in front of the model."""
     _emit({
         "hookSpecificOutput": {
-            "hookEventName": "PreToolUse",
+            "hookEventName": event_name,
             "additionalContext": context,
         }
     })
@@ -168,23 +168,36 @@ def handle_post_tool_use(event: dict) -> int:
         return 0
 
     settings = config.load(root)
-    if not settings.ledger:
-        return 0
 
-    ledger.record_write(
-        root,
-        target,
-        {
-            "session_id": event.get("session_id"),
-            "agent_type": event.get("agent_type"),
-        },
-    )
-    # The template-contract check (M4) reports through this same handler.
+    if settings.ledger:
+        ledger.record_write(
+            root,
+            target,
+            {
+                "session_id": event.get("session_id"),
+                "agent_type": event.get("agent_type"),
+            },
+        )
+
+    if settings.template_check:
+        findings = templates.check_file(target)
+        if findings:
+            rel = artifacts.relative_to_root(target, root) or str(target)
+            _note(templates.format_findings(rel, findings), event_name="PostToolUse")
     return 0
 
 
 def handle_subagent_stop(event: dict) -> int:
-    """Agent-run trail. Inert until M4."""
+    """Record that a subagent finished, so agent runs can be counted from the repo."""
+    root = _root_for(event)
+    if root is None:
+        return 0
+
+    settings = config.load(root)
+    if not settings.trail:
+        return 0
+
+    trail.record_run(root, event)
     return 0
 
 
@@ -227,12 +240,24 @@ def _scan(argv: list[str]) -> int:
     settings = config.load(root)
     tracked = list(artifacts.iter_artifacts(root))
     entries = list(ledger.read_entries(root))
+    runs = list(trail.read_entries(root))
     drifted = drift.find_drifted(root)
+    contract = [
+        (artifacts.relative_to_root(path, root), findings)
+        for path in tracked
+        for findings in [templates.check_file(path)]
+        if findings
+    ]
 
     print(f"root:            {root}")
     print(f"enabled:         {settings.enabled} (ledger={settings.ledger}, drift={settings.drift_check})")
     print(f"artifacts:       {len(tracked)}")
     print(f"ledger entries:  {len(entries)}")
+    print(f"agent runs:      {len(runs)}")
+    print(f"template drift:  {len(contract)} artifact(s)")
+    for rel, findings in contract:
+        for finding in findings:
+            print(f"  ~ {rel}: {finding}")
     print(f"drifted:         {len(drifted)}")
     for path in drifted:
         print(f"  ! {path}")

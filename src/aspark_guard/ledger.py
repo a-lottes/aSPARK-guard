@@ -29,11 +29,13 @@ def utc_now() -> str:
     return datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
 
 
-def append(root: Path, entry: dict) -> bool:
-    """Append one JSON line. Returns False if it could not be written."""
-    path = ledger_path(root)
+def append_to(path: Path, entry: dict) -> bool:
+    """Append one JSON line to an append-only log. False if it could not be written.
+
+    Shared with the agent-run trail, which has the same shape and the same rules.
+    """
     try:
-        path.parent.mkdir(parents=True, exist_ok=True)
+        Path(path).parent.mkdir(parents=True, exist_ok=True)
         line = json.dumps(entry, ensure_ascii=False, sort_keys=True)
         # Append mode on a POSIX filesystem keeps concurrent writers from
         # interleaving whole lines; the guard never rewrites existing ones.
@@ -44,9 +46,8 @@ def append(root: Path, entry: dict) -> bool:
         return False
 
 
-def read_entries(root: Path):
+def read_jsonl(path: Path):
     """Yield parsed entries in file order, skipping any line that does not parse."""
-    path = ledger_path(root)
     try:
         with open(path, "r", encoding="utf-8", errors="replace") as handle:
             for line in handle:
@@ -61,6 +62,14 @@ def read_entries(root: Path):
                     yield parsed
     except OSError:
         return
+
+
+def append(root: Path, entry: dict) -> bool:
+    return append_to(ledger_path(root), entry)
+
+
+def read_entries(root: Path):
+    yield from read_jsonl(ledger_path(root))
 
 
 def last_hash_by_path(root: Path) -> dict:
