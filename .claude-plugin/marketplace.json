@@ -1,0 +1,15 @@
+{
+  "name": "aspark-guard",
+  "description": "Marketplace for aspark-guard — deterministic gate enforcement and a hash ledger for aSPARK's .spark/ artifacts.",
+  "owner": {
+    "name": "Andreas Lottes",
+    "email": "andreas@lottes.dev"
+  },
+  "plugins": [
+    {
+      "name": "aspark-guard",
+      "source": "./",
+      "description": "Deterministic gate enforcement and a hash ledger for aSPARK. Silent in projects that don't use aSPARK."
+    }
+  ]
+}

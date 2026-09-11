@@ -1,0 +1,10 @@
+{
+  "name": "aspark-guard",
+  "description": "Deterministic gate enforcement and a hash ledger for aSPARK's .spark/ artifacts. Silent in projects that don't use aSPARK.",
+  "version": "0.0.1",
+  "author": {
+    "name": "Andreas Lottes",
+    "email": "andreas@lottes.dev"
+  },
+  "keywords": ["aspark", "hooks", "quality-gates", "audit", "traceability"]
+}

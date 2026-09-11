@@ -1,0 +1,10 @@
+{
+  "session_id": "abc123",
+  "cwd": "__ROOT__",
+  "hook_event_name": "PostToolUse",
+  "tool_name": "Edit",
+  "tool_input": {"file_path": "__ROOT__/.spark/weekly-stats/spec.md", "old_string": "a", "new_string": "b"},
+  "tool_response": "ok",
+  "agent_id": "sub-1",
+  "agent_type": "product-owner"
+}

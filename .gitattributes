@@ -1,0 +1,3 @@
+# The guard's own logs are append-only: a cross-branch conflict is never a
+# conflicting edit, only a conflicting file.
+.spark/.guard/*.jsonl merge=union
