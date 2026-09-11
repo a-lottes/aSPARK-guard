@@ -13,11 +13,10 @@ from pathlib import Path
 _TIMEOUT_SECONDS = 2
 
 
-def head(root: Path) -> str | None:
-    """Short SHA of HEAD, or None if it cannot be determined."""
+def _git(root: Path, *args: str) -> str | None:
     try:
         result = subprocess.run(
-            ["git", "rev-parse", "--short", "HEAD"],
+            ["git", *args],
             cwd=str(root),
             capture_output=True,
             text=True,
@@ -28,5 +27,14 @@ def head(root: Path) -> str | None:
         return None
     if result.returncode != 0:
         return None
-    value = result.stdout.strip()
-    return value or None
+    return result.stdout.strip() or None
+
+
+def head(root: Path) -> str | None:
+    """Short SHA of HEAD, or None if it cannot be determined."""
+    return _git(root, "rev-parse", "--short", "HEAD")
+
+
+def user_name(root: Path) -> str | None:
+    """The configured git user, used to pre-fill who granted an override."""
+    return _git(root, "config", "user.name")

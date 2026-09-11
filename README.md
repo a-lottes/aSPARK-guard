@@ -12,8 +12,7 @@ blockers, refuse the release."* aSPARK's own roadmap names the consequence:
 > the agent's own view, a passed gate."*
 
 `aspark-guard` is a companion plugin that adds what a prompt cannot provide: a check
-that runs **outside** the model, on the tool call itself. Two guarantees when it is
-complete:
+that runs **outside** the model, on the tool call itself. Two guarantees:
 
 1. **No gate can be skipped silently.** A write that violates a phase precondition is
    denied before it happens, however good the reasoning behind it sounded.
@@ -26,20 +25,20 @@ Core is not modified. Nothing here runs unless a project has a `.spark/` directo
 
 ## Status
 
-**This is `0.0.2`. Three of six milestones are built.**
+**This is `0.0.3`. Four of six milestones are built.**
 
 | Milestone | What it does | State |
 |---|---|---|
 | **M0** Skeleton | Plugin manifest, four wired hooks, payload parsing, the silence and fail-open invariants | **Built** |
 | **M1** Ledger + drift check | Every `.spark/` write recorded with its SHA-256 and status; artifacts edited outside the loop reported at session start | **Built** |
 | **M2** Gate guard | Rules R1–R3 deny writes that violate a phase precondition | **Built** |
-| **M3** Override mechanics | R4 plus hash-bound override entries | Not built — the only way past a rule today is `warn`/`off` in the config |
+| **M3** Override mechanics | R4 plus hash-bound override entries | **Built** |
 | **M4** Template validator + trail | Form drift warnings; agent-run trail | Not built — `subagent-stop` is inert |
-| **M5** Release | README, marketplace entry, `0.1.0` | Not built |
+| **M5** Release | Field report from a real project, `0.1.0` | Not built |
 
-So guarantee 1 holds today for the three rules below. Guarantee 2 does not yet: until
-M3, a rule you disagree with is switched off in the config rather than overridden on
-the record.
+Both guarantees hold today for the three rules below. What is missing is not mechanism
+but evidence: none of this has yet run a full feature loop on a project that isn't this
+author's.
 
 ---
 
@@ -55,7 +54,7 @@ isn't met"*). The guard makes that refusal structural instead of instructional.
 | `qa-requires-passed-review` | `qa.md` | `review.md` exists and is not `passed` |
 | `release-requires-green-gates` | `release.md` | `review.md` or `qa.md` is not `passed`, or `qa.md` still lists a Blocker whose status is exactly `open` |
 
-A denial names the rule, the state that triggered it, and the way forward:
+A denial names the rule, the state that triggered it, and every way forward:
 
 ```
 aspark-guard: a release may not be written over a red gate.
@@ -63,6 +62,11 @@ aspark-guard: a release may not be written over a red gate.
   state: .spark/weekly-stats/qa.md still lists 1 open Blocker(s): B1.
   Close the gates first (/increment for the fixes, then /peer-review and /demo-day),
   or record an abort by writing this release with status `aborted`.
+  To overrule this, append this line to .spark/weekly-stats/overrides.jsonl YOURSELF
+  — not via the agent — and replace <why> with the reason:
+    {"ts": "…", "rule": "release-requires-green-gates", "artifact": "qa.md",
+     "artifact_sha256": "7d41…", "reason": "<why>", "granted_by": "andreas.lottes"}
+  The override lapses as soon as the artifact it names changes.
   If this rule does not fit this project, set it to "warn" or "off" under "rules" in
   .spark/guard.json.
 ```
@@ -88,7 +92,56 @@ Every one of these is a decision, not an oversight — and each is tested:
   open-findings view". Real artifacts carry severities like `Blocker → superseded` and
   statuses like `fixed r6, reconfirmed r8`; neither is open.
 
-### Checking the rules against your own history
+---
+
+## Overriding a gate
+
+A gate can be overruled. It cannot be overruled *quietly*.
+
+An override is one line appended to `.spark/<feature>/overrides.jsonl`, naming the rule,
+the artifact whose state caused the block, **the SHA-256 that artifact had at that
+moment**, and a reason:
+
+```json
+{"ts":"2026-09-11T10:02:00Z","rule":"release-requires-green-gates",
+ "artifact":"qa.md","artifact_sha256":"7d41…",
+ "reason":"AC-3.2 only reproducible on Safari, fix in the next feature, customer informed",
+ "granted_by":"andreas.lottes"}
+```
+
+Four properties make it worth something:
+
+- **It is bound to content, not to a gate.** Change `qa.md` by one character and the
+  override lapses — the thing it described no longer exists. This is stricter than
+  adSCAILE's `override_decision_id`, which binds to the gate rather than to what the
+  gate was looking at.
+- **A reason is structurally required.** The suggested line ships with `<why>`, and an
+  entry still carrying the placeholder — or an empty reason — grants nothing. You cannot
+  paste your way past a gate.
+- **One override settles one artifact.** A release blocked by both a failed review *and*
+  a failed QA needs two. The denial then names only what is still open.
+- **The agent may not write the file.** Rule `overrides-are-human-only` denies any
+  agent write to `overrides.jsonl` and hands back the exact line for you to append
+  yourself — an override the agent can grant itself is not an override.
+
+And it stays visible: `guard.py check` reports overridden gates explicitly rather than
+counting them as clean.
+
+```
+weekly-stats/plan.md: OVERRIDDEN [plan-requires-approved-spec] .spark/weekly-stats/spec.md is `draft`, not `approved`.
+checked 3 gated artifacts, 0 would be blocked, 1 overridden
+```
+
+**The honest limit.** A hook cannot tell "the agent decided this" from "the user
+dictated it" — ask the agent to append the line from a shell and it will. Closing that
+would mean policing your own terminal. The goal was never *no override*; it is *no
+silent override*, and every route leaves the same dated, content-bound, committed line.
+That is exactly as far as adSCAILE's guarantee reaches too: it cannot stop a human from
+approving, only from approving without saying why.
+
+---
+
+## Checking the rules against your own history
 
 ```bash
 python3 /path/to/aSPARK-guard/bin/guard.py check .
@@ -150,9 +203,12 @@ normal case on adoption and stays quiet.
 
 ## Install
 
+It ships from the same marketplace as aSPARK itself, so if you already added that one,
+step one is done:
+
 ```bash
-claude plugin marketplace add a-lottes/aSPARK-guard
-claude plugin install aspark-guard@aspark-guard
+claude plugin marketplace add a-lottes/aSPARK
+claude plugin install aspark-guard@aspark
 ```
 
 Then restart Claude Code. Requires Python 3.11+ on `PATH` as `python3`. POSIX only for
@@ -190,7 +246,7 @@ Optional, at `.spark/guard.json`. Absent or malformed means these defaults:
     "plan-requires-approved-spec":  "block",
     "qa-requires-passed-review":    "block",
     "release-requires-green-gates": "block",
-    "overrides-are-human-only":     "block"   // M3, inert
+    "overrides-are-human-only":     "block"
   }
 }
 ```
@@ -231,7 +287,7 @@ runs for. The only subprocess it ever spawns is `git rev-parse --short HEAD`.
 python3 -m unittest discover -s tests -t tests
 ```
 
-82 tests, no dependencies, no network, no Claude Code required. Three layers:
+99 tests, no dependencies, no network, no Claude Code required. Three layers:
 
 - **Behaviour against fixtures** — one artifact state per fixture: draft, approved,
   uninstantiated template, broken header table.
@@ -248,6 +304,7 @@ src/aspark_guard/
   artifacts.py            locating, classifying, hashing, status parsing
   ledger.py               the append-only chain
   drift.py                outside-edit detection
+  overrides.py            reading, matching and suggesting override entries
   config.py               .spark/guard.json
   gitinfo.py              the one subprocess
 ```
@@ -258,8 +315,7 @@ src/aspark_guard/
 
 - **POSIX only.** The hook command is `python3 …`; Windows needs a `py -3` fallback.
 - **A determined route around it exists** and always will: a hook cannot distinguish
-  "the agent decided this" from "the user dictated it". The goal is not *no override*
-  but *no silent override*.
+  "the agent decided this" from "the user dictated it". See *Overriding a gate*.
 - **The ledger is only as honest as the repo.** Nothing stops a force-push. Integrity
   here rests on git, not on the guard.
 - **Not proven in a real project yet.** Everything above is tested; none of it has run

@@ -15,7 +15,7 @@ import json
 import sys
 from pathlib import Path
 
-from . import artifacts, config, drift, ledger, rules
+from . import artifacts, config, drift, ledger, overrides, rules
 
 EVENTS = ("pre-tool-use", "post-tool-use", "subagent-stop", "session-start")
 
@@ -118,11 +118,43 @@ def handle_pre_tool_use(event: dict) -> int:
         return 0
 
     mode = settings.rule_mode(violation.rule_id)
+    if mode == "off":
+        return 0
+
+    message = violation.message(_override_lines(root, violation))
     if mode == "block":
-        _deny(violation.message())
-    elif mode == "warn":
-        _note(violation.message())
+        _deny(message)
+    else:
+        _note(message)
     return 0
+
+
+def _override_lines(root: Path, violation) -> list[str]:
+    """Ready-to-paste override entries for whatever this block is about.
+
+    For a gate rule that is the violation's own triggers. For R4 — an agent writing
+    the override file — it is every gate currently blocking in that feature, which
+    is what the human was presumably about to overrule.
+    """
+    timestamp = ledger.utc_now()
+    feature = violation.feature
+    if feature is None:
+        return []
+
+    if violation.rule_id == rules.R_OVERRIDE:
+        pairs = [
+            (pending.rule_id, trigger)
+            for pending in rules.pending(root, feature)
+            for trigger in rules.uncovered(root, pending)
+        ]
+    else:
+        pairs = [(violation.rule_id, trigger) for trigger in violation.triggers]
+
+    return [
+        overrides.suggest_line(root, rule_id, trigger.artifact, trigger.sha256, timestamp)
+        for rule_id, trigger in pairs
+        if trigger.sha256
+    ]
 
 
 def handle_post_tool_use(event: dict) -> int:
@@ -205,7 +237,7 @@ def _scan(argv: list[str]) -> int:
     for path in drifted:
         print(f"  ! {path}")
     print("rules:")
-    for rule_id in (rules.R_PLAN, rules.R_QA, rules.R_RELEASE):
+    for rule_id in rules.ALL_RULES:
         print(f"  {settings.rule_mode(rule_id):<6} {rule_id}")
     return 0
 
@@ -223,25 +255,38 @@ def _check(argv: list[str]) -> int:
         print(f"no .spark/ directory at or above {start}")
         return 0
 
-    gated = (rules.PLAN, rules.QA, rules.RELEASE)
     checked = 0
     violations = 0
+    overridden = 0
 
     spark = Path(root) / artifacts.SPARK_DIR
     for feature_dir in sorted(p for p in spark.iterdir() if p.is_dir()):
         if feature_dir.name == artifacts.GUARD_DIR:
             continue
-        for name in gated:
+        for name in rules.GATED_ARTIFACTS:
             target = feature_dir / name
             if not target.is_file():
                 continue
             checked += 1
+
+            raw = rules.evaluate(root, target, apply_overrides=False)
+            if raw is None:
+                continue
+
             violation = rules.evaluate(root, target)
-            if violation is not None:
+            if violation is None:
+                # Every trigger is accounted for by an override. Showing these is
+                # the point of the mechanism: an override is meant to be seen.
+                overridden += 1
+                print(f"{feature_dir.name}/{name}: OVERRIDDEN [{raw.rule_id}] {raw.state}")
+            else:
                 violations += 1
                 print(f"{feature_dir.name}/{name}: [{violation.rule_id}] {violation.state}")
 
-    print(f"checked {checked} gated artifacts, {violations} would be blocked")
+    summary = f"checked {checked} gated artifacts, {violations} would be blocked"
+    if overridden:
+        summary += f", {overridden} overridden"
+    print(summary)
     return 0
 
 
