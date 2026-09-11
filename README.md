@@ -25,7 +25,8 @@ Core is not modified. Nothing here runs unless a project has a `.spark/` directo
 
 ## Status
 
-**This is `0.0.4`. Five of six milestones are built.**
+**This is `0.1.0` — the first complete version. All six milestones are built;
+what is missing is field evidence, not mechanism.**
 
 | Milestone | What it does | State |
 |---|---|---|
@@ -34,11 +35,16 @@ Core is not modified. Nothing here runs unless a project has a `.spark/` directo
 | **M2** Gate guard | Rules R1–R3 deny writes that violate a phase precondition | **Built** |
 | **M3** Override mechanics | R4 plus hash-bound override entries | **Built** |
 | **M4** Template validator + trail | Form drift reported as context, never blocked; one trail line per finished subagent | **Built** |
-| **M5** Release | Field report from a real project, `0.1.0` | Not built |
+| **M5** Release | Installation proven from the manifest's own command lines; full-cycle test; `docs/evidence.md` | **Built** |
 
-Both guarantees hold today for the three rules below. What is missing is not mechanism
-but evidence: none of this has yet run a full feature loop on a project that isn't this
-author's.
+Both guarantees hold for the three rules below, proven by 142 tests and replayed over
+22 real gated artifacts without a false positive.
+
+**The one gap that matters:** none of this has run a full feature loop on a project that
+isn't this author's — the same gap aSPARK Core names at the top of its own roadmap, for
+the same reason. Only a real run shows whether a rule fires where it should *and* stays
+quiet where it shouldn't. [`docs/evidence.md`](docs/evidence.md) is the complete account
+of what has and has not been exercised.
 
 ---
 
@@ -342,15 +348,21 @@ runs for. The only subprocess it ever spawns is `git rev-parse --short HEAD`.
 python3 -m unittest discover -s tests -t tests
 ```
 
-129 tests, no dependencies, no network, no Claude Code required. Three layers:
+142 tests, no dependencies, no network, no Claude Code required. Three layers:
 
 - **Behaviour against fixtures** — one artifact state per fixture: draft, approved,
   uninstantiated template, broken header table.
-- **Hook contract tests** (`tests/fixtures/payloads/`) — recorded payloads in the shape
-  Claude Code documents, so an API change surfaces here rather than as a plugin that
-  silently stopped working.
+- **Hook contract tests** (`tests/fixtures/payloads/`, `test_install.py`) — recorded
+  payloads in the shape Claude Code documents, plus the manifest's own command lines run
+  through a shell from a path containing a space. An API change surfaces here rather
+  than as a plugin that silently stopped working.
 - **Fail-open tests** — every hostile input we could think of must yield exit 0 and no
   output.
+
+`test_end_to_end.py` runs one feature through the whole cycle with all four mechanisms
+live, because the unit tests each prove one rule and none of them proves they compose.
+See [CONTRIBUTING.md](CONTRIBUTING.md) before adding a rule — the false-positive check
+against real history is not optional.
 
 ```
 bin/guard.py              one entry point, one subcommand per hook event
@@ -375,8 +387,14 @@ src/aspark_guard/
   "the agent decided this" from "the user dictated it". See *Overriding a gate*.
 - **The ledger is only as honest as the repo.** Nothing stops a force-push. Integrity
   here rests on git, not on the guard.
-- **Not proven in a real project yet.** Everything above is tested; none of it has run
-  a full feature loop on someone else's repo.
+- **~50 ms on every `Write`/`Edit`, everywhere** — including repos with no `.spark/`
+  directory, where the guard does nothing. Mostly Python interpreter startup. This is
+  the strongest argument against installing it.
+- **Untested: concurrent sessions.** Two agents writing `.spark/` at once both append to
+  the ledger; POSIX append should keep whole lines intact, but that has not been shown.
+- **Not proven in a real project yet.** Everything above is tested; none of it has run a
+  full feature loop on someone else's repo. [`docs/evidence.md`](docs/evidence.md) lists
+  exactly what has and has not been exercised.
 
 ---
 
