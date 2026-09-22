@@ -7,7 +7,7 @@ must produce exit 0 and no output.
 
 import unittest
 
-from support import GuardTestCase
+from support import ACTIVITY_COMMANDS, GuardTestCase
 
 
 class TestHostileInput(GuardTestCase):
@@ -22,6 +22,36 @@ class TestHostileInput(GuardTestCase):
                     code, out = self.run_hook(command, raw)
                     self.assertEqual(code, 0)
                     self.assertEqual(out, "")
+
+    def test_activity_hooks_survive_malformed_or_empty_stdin(self):
+        for raw in ("", "   ", "not json", "[]", "null", '{"session_id": 7}', "{"):
+            for command in ACTIVITY_COMMANDS:
+                with self.subTest(raw=raw, event=command):
+                    self.assertEqual(self.run_hook(command, raw), (0, ""))
+
+    def test_activity_hooks_survive_wrong_field_types(self):
+        for event in ({"cwd": str(self.root), "session_id": ["x"]},
+                      {"cwd": 42}, {"cwd": str(self.root), "agent_id": {}, "reason": 3}):
+            for command in ACTIVITY_COMMANDS:
+                with self.subTest(event=event, command=command):
+                    self.assertEqual(self.run_hook(command, event), (0, ""))
+
+    def test_an_unwritable_guard_directory_does_not_break_an_activity_hook(self):
+        guard_dir = self.root / ".spark" / ".guard"
+        guard_dir.mkdir(parents=True)
+        guard_dir.chmod(0o500)
+        self.addCleanup(guard_dir.chmod, 0o700)
+
+        for command in ACTIVITY_COMMANDS:
+            with self.subTest(event=command):
+                self.assertEqual(
+                    self.run_hook(command, {"cwd": str(self.root), "session_id": "s1"}), (0, "")
+                )
+
+    def test_every_event_has_a_handler(self):
+        from aspark_guard import cli
+
+        self.assertEqual(set(cli.EVENTS), set(cli.HANDLERS))
 
     def test_missing_fields(self):
         for event in ({}, {"cwd": str(self.root)}, {"tool_input": {}},

@@ -19,6 +19,12 @@ sys.path.insert(0, str(REPO_ROOT / "src"))
 from aspark_guard import cli  # noqa: E402
 
 
+# The subcommands activity-trail added. Derived from `cli.EVENTS`, so the silence and
+# fail-open tests below cover every hook a later task wires, without being edited.
+ORIGINAL_COMMANDS = ("pre-tool-use", "post-tool-use", "subagent-stop", "session-start")
+ACTIVITY_COMMANDS = tuple(c for c in cli.EVENTS if c not in ORIGINAL_COMMANDS)
+
+
 def fixture_text(name: str) -> str:
     return (FIXTURES / "artifacts" / name).read_text(encoding="utf-8")
 

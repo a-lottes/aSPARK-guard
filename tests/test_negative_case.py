@@ -7,7 +7,7 @@ A project without `.spark/` must not be able to tell this plugin is installed.
 
 import unittest
 
-from support import GuardTestCase
+from support import ACTIVITY_COMMANDS, GuardTestCase
 
 
 class TestSilentWithoutSpark(GuardTestCase):
@@ -32,6 +32,20 @@ class TestSilentWithoutSpark(GuardTestCase):
 
         self.assertEqual(self.tree(), before, "the guard created or removed a file")
 
+    def test_every_activity_event_is_silent_and_writes_nothing(self):
+        before = self.tree()
+        self.assertTrue(ACTIVITY_COMMANDS)
+
+        for command in ACTIVITY_COMMANDS:
+            with self.subTest(event=command):
+                code, out = self.run_hook(command, {
+                    "cwd": str(self.root), "session_id": "s1", "agent_id": "a1",
+                    "agent_type": "reviewer", "reason": "clear",
+                })
+                self.assertEqual((code, out), (0, ""))
+
+        self.assertEqual(self.tree(), before, "the guard created or removed a file")
+
     def test_write_inside_a_spark_lookalike_outside_the_root_is_ignored(self):
         # A directory literally named `.sparkle` must not be mistaken for `.spark`.
         target = self.write_artifact(".sparkle/spec.md", "# not ours\n")
@@ -49,6 +63,15 @@ class TestSilentWhenDisabled(GuardTestCase):
         code, out = self.post_tool_use(target)
         self.assertEqual((code, out), (0, ""))
         self.assertFalse(self.ledger_file.exists())
+
+    def test_config_disables_every_activity_event(self):
+        self.make_spark_project()
+        self.write_config({"enabled": False})
+        for command in ACTIVITY_COMMANDS:
+            with self.subTest(event=command):
+                code, out = self.run_hook(command, {"cwd": str(self.root), "session_id": "s1"})
+                self.assertEqual((code, out), (0, ""))
+        self.assertFalse((self.root / ".spark" / ".guard").exists())
 
     def test_ledger_can_be_switched_off_alone(self):
         self.make_spark_project()
