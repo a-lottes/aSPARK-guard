@@ -298,6 +298,84 @@ class TestAgentRun(ActivityTestCase):
         self.assertEqual(len(self.runs()), 1)
 
 
+class TestTaskLabel(ActivityTestCase):
+    def launch(self, description="Write the spec", agent_type="aspark:product-owner", **extra):
+        data = payload("pre_tool_use_task.json", self.root, **extra)
+        data["tool_input"]["description"] = description
+        data["tool_input"]["subagent_type"] = agent_type
+        return self.run_hook("pre-tool-use", data)
+
+    def start(self, agent_id="a1", agent_type="aspark:product-owner"):
+        self.hook("subagent-start", "subagent_start.json", agent_id=agent_id, agent_type=agent_type)
+        return [e for e in self.activity_entries() if e["event"] == "subagent_start"][-1]
+
+    def test_the_launch_description_becomes_the_task(self):
+        self.assertEqual(self.launch(), (0, ""), "the subagent tool is never gated")
+        self.assertEqual(self.start()["task"], "Write the spec")
+
+    def test_the_label_is_one_short_line_without_control_characters(self):
+        self.launch("Review\nthe\x1b[31m diff \t" + "x" * 120)
+        task = self.start()["task"]
+        self.assertLessEqual(len(task), 80)
+        self.assertTrue(task.startswith("Review the [31m diff x"))
+        self.assertFalse(any(ord(ch) < 32 for ch in task))
+
+    def test_no_description_gives_a_null_task(self):
+        for value in (None, "", "   ", 7):
+            with self.subTest(value=value):
+                self.launch(value)
+                self.assertIsNone(self.start()["task"])
+
+    def test_a_start_without_a_launch_gets_a_null_task(self):
+        self.assertIsNone(self.start()["task"])
+
+    def test_two_parallel_launches_of_one_type_give_null_for_both(self):
+        self.launch("run A")
+        self.launch("run B")
+        self.assertIsNone(self.start("a1")["task"])
+        self.assertIsNone(self.start("a2")["task"])
+
+    def test_launches_of_different_types_keep_their_own_label(self):
+        self.launch("Write the spec", "aspark:product-owner")
+        self.launch("Check the design", "aspark:designer")
+        self.assertEqual(self.start("a2", "aspark:designer")["task"], "Check the design")
+        self.assertEqual(self.start("a1", "aspark:product-owner")["task"], "Write the spec")
+
+    def test_a_launch_older_than_60_seconds_is_ignored(self):
+        from aspark_guard import activity
+
+        self.launch("stale")
+        pending = activity.pending_path(self.root)
+        [entry] = [json.loads(l) for l in pending.read_text(encoding="utf-8").splitlines()]
+        entry["t"] -= 61
+        pending.write_text(json.dumps(entry) + "\n", encoding="utf-8")
+        self.assertIsNone(self.start()["task"])
+
+    def test_a_launch_of_another_session_is_not_used(self):
+        self.launch(session_id="other")
+        self.assertIsNone(self.start()["task"])
+
+    def test_the_subagent_prompt_is_never_stored(self):
+        self.launch()
+        from aspark_guard import activity
+
+        self.assertNotIn("SUBAGENT_PROMPT", activity.pending_path(self.root).read_text(encoding="utf-8"))
+
+    def test_a_write_is_still_gated_as_before(self):
+        self.write_fixture_artifact(".spark/weekly-stats/spec.md", "spec_draft.md")
+        self.launch()
+        code, out = self.run_hook("pre-tool-use", payload("pre_tool_use_write.json", self.root))
+        decision = json.loads(out)["hookSpecificOutput"]
+        self.assertEqual(decision["permissionDecision"], "deny")
+
+    def test_activity_off_parks_no_label(self):
+        from aspark_guard import activity
+
+        self.write_config({"activity": False})
+        self.launch()
+        self.assertFalse(activity.pending_path(self.root).exists())
+
+
 class TestSwitch(ActivityTestCase):
     def test_activity_false_writes_nothing(self):
         self.write_config({"activity": False})

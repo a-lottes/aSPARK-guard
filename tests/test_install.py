@@ -65,6 +65,22 @@ class TestManifestShape(unittest.TestCase):
         for event in ("PreToolUse", "PostToolUse"):
             self.assertEqual(manifest["hooks"][event][0]["matcher"], "Write|Edit")
 
+    def test_tool_hooks_match_only_write_edit_and_the_subagent_tool(self):
+        # AC-4.8: no hook on ordinary tool calls — every one would cost ~50 ms.
+        manifest = json.loads(MANIFEST.read_text(encoding="utf-8"))
+        matchers = {
+            event: [entry.get("matcher") for entry in manifest["hooks"][event]]
+            for event in ("PreToolUse", "PostToolUse")
+        }
+        self.assertEqual(matchers, {"PreToolUse": ["Write|Edit", "Agent"],
+                                    "PostToolUse": ["Write|Edit"]})
+
+    def test_the_subagent_matcher_calls_the_gate_command_without_its_status_message(self):
+        manifest = json.loads(MANIFEST.read_text(encoding="utf-8"))
+        gate, label = manifest["hooks"]["PreToolUse"]
+        self.assertEqual(label["hooks"][0]["command"], gate["hooks"][0]["command"])
+        self.assertNotIn("statusMessage", label["hooks"][0])
+
     def test_notification_is_not_hooked_so_idle_reminders_never_start_the_guard(self):
         # D-T1-1: `waiting` comes from PermissionRequest; an `idle_prompt`
         # notification must not flip an idle session to waiting (AC-1.3).

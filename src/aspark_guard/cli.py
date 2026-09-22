@@ -115,6 +115,9 @@ def handle_pre_tool_use(event: dict) -> int:
     Exit stays 0 in every branch: the decision travels in the JSON, which is the
     only way to give the user a reason they can read.
     """
+    if event.get("tool_name") == activity.SUBAGENT_TOOL:
+        return _park_task_label(event)
+
     target = _written_path(event)
     if target is None:
         return 0
@@ -137,6 +140,22 @@ def handle_pre_tool_use(event: dict) -> int:
         _deny(message)
     else:
         _note(message)
+    return 0
+
+
+def _park_task_label(event: dict) -> int:
+    """A subagent is about to launch: keep its short label for the SubagentStart.
+
+    The subagent tool shares this hook with the gate, through a second matcher that
+    calls the same command. It is never gated, and stdout stays empty.
+    """
+    root = _root_for(event)
+    if root is None:
+        return 0
+
+    settings = config.load(root)
+    if settings.activity:
+        activity.record_pending_task(root, event)
     return 0
 
 

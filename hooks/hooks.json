@@ -8,7 +8,17 @@
             "type": "command",
             "command": "python3 \"${CLAUDE_PLUGIN_ROOT}/bin/guard.py\" pre-tool-use",
             "timeout": 5,
-            "statusMessage": "Checking SPARK gate\u2026"
+            "statusMessage": "Checking SPARK gate…"
+          }
+        ]
+      },
+      {
+        "matcher": "Agent",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 \"${CLAUDE_PLUGIN_ROOT}/bin/guard.py\" pre-tool-use",
+            "timeout": 5
           }
         ]
       }

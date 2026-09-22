@@ -19,6 +19,8 @@ import fcntl
 import json
 import os
 import time
+import unicodedata
+from contextlib import contextmanager
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -37,6 +39,13 @@ LOCK_DEADLINE_S = 0.5
 GITIGNORE_TEXT = "/.gitignore\n/activity*\n"
 
 
+# The subagent tool's name (T1). Its PreToolUse carries the short description the
+# main session gave the run; SubagentStart doesn't, so the label waits in a pending
+# file for the start that follows.
+SUBAGENT_TOOL = "Agent"
+TASK_MAX_CHARS = 80
+PENDING_MAX_AGE_S = 60.0
+
 # `SessionEnd.reason` values seen in the T1 spike. Anything else is `other`, so no
 # harness-supplied string ever reaches the log unchecked.
 END_REASONS = frozenset({"clear", "prompt_input_exit", "logout", "other"})
@@ -48,6 +57,10 @@ def activity_path(root: Path) -> Path:
 
 def rotated_path(root: Path) -> Path:
     return activity_path(root).with_name("activity.jsonl.1")
+
+
+def pending_path(root: Path) -> Path:
+    return activity_path(root).with_name("activity.pending.jsonl")
 
 
 def utc_now_ms() -> str:
@@ -87,23 +100,32 @@ def append_locked(path: Path, entry: dict) -> bool:
     """
     try:
         line = json.dumps(entry, ensure_ascii=False, sort_keys=True)
-        guard_dir = Path(path).parent
-        guard_dir.mkdir(parents=True, exist_ok=True)
-        _ensure_gitignore(guard_dir)
-        with open(guard_dir / "activity.lock", "a", encoding="utf-8") as lock:
-            if not _acquire(lock):
+        with _locked(Path(path).parent) as held:
+            if not held:
                 return False
-            try:
-                _repair_tail(path)
-                if _size(path) >= MAX_BYTES:
-                    os.replace(path, Path(path).with_name(Path(path).name + ".1"))
-                with open(path, "a", encoding="utf-8") as handle:
-                    handle.write(line + "\n")
-            finally:
-                fcntl.flock(lock, fcntl.LOCK_UN)
+            _repair_tail(path)
+            if _size(path) >= MAX_BYTES:
+                os.replace(path, Path(path).with_name(Path(path).name + ".1"))
+            with open(path, "a", encoding="utf-8") as handle:
+                handle.write(line + "\n")
         return True
     except (OSError, TypeError, ValueError):
         return False
+
+
+@contextmanager
+def _locked(guard_dir: Path):
+    """Hold `.spark/.guard/activity.lock`; yields False if the deadline passed."""
+    guard_dir.mkdir(parents=True, exist_ok=True)
+    _ensure_gitignore(guard_dir)
+    with open(guard_dir / "activity.lock", "a", encoding="utf-8") as lock:
+        if not _acquire(lock):
+            yield False
+            return
+        try:
+            yield True
+        finally:
+            fcntl.flock(lock, fcntl.LOCK_UN)
 
 
 def _acquire(lock) -> bool:
@@ -179,8 +201,70 @@ def record_subagent_start(root: Path, event: dict) -> dict | None:
         agent_id=_agent_id(event),
         agent_type=agent_type,
         feature=trail.feature_for_session(root, _session_id(event)),
-        task=None,
+        task=_claim_task(root, _session_id(event), agent_type),
     )
+
+
+def sanitize_task(value) -> str | None:
+    """The label as a single short line: no control characters, whitespace collapsed,
+    at most TASK_MAX_CHARS. Anything that isn't a non-empty string is None."""
+    if not isinstance(value, str):
+        return None
+    kept = "".join(" " if unicodedata.category(ch).startswith("C") else ch for ch in value)
+    collapsed = " ".join(kept.split())
+    return collapsed[:TASK_MAX_CHARS].rstrip() or None
+
+
+def record_pending_task(root: Path, event: dict) -> bool:
+    """Park a subagent launch's short description until its SubagentStart arrives.
+
+    Only `tool_input.description` and `subagent_type` are read — never the prompt.
+    """
+    tool_input = event.get("tool_input")
+    if not isinstance(tool_input, dict):
+        return False
+    agent_type = tool_input.get("subagent_type")
+    entry = {
+        "t": time.time(),
+        "session_id": _session_id(event),
+        "agent_type": agent_type if isinstance(agent_type, str) and agent_type else None,
+        "task": sanitize_task(tool_input.get("description")),
+    }
+    return append_locked(pending_path(root), entry)
+
+
+def _claim_task(root: Path, session_id: str | None, agent_type: str) -> str | None:
+    """The label for this start, if exactly one fresh launch of this session and type
+    is pending. Every matching entry is used up either way, so two same-type launches
+    in parallel both get None rather than each other's label (AC-5.4)."""
+    path = pending_path(root)
+    if not path.exists():
+        return None
+    try:
+        with _locked(path.parent) as held:
+            if not held:
+                return None
+            now = time.time()
+            keep, matched = [], []
+            for entry in ledger.read_jsonl(path):
+                t = entry.get("t")
+                if not isinstance(t, (int, float)) or now - t > PENDING_MAX_AGE_S:
+                    continue
+                if entry.get("session_id") == session_id and entry.get("agent_type") == agent_type:
+                    matched.append(entry)
+                else:
+                    keep.append(entry)
+            tmp = path.with_name(path.name + ".tmp")
+            with open(tmp, "w", encoding="utf-8") as handle:
+                for entry in keep:
+                    handle.write(json.dumps(entry, ensure_ascii=False, sort_keys=True) + "\n")
+            os.replace(tmp, path)
+    except (OSError, TypeError, ValueError):
+        return None
+    if len(matched) != 1:
+        return None
+    task = matched[0].get("task")
+    return task if isinstance(task, str) else None
 
 
 def record_agent_run(root: Path, event: dict, stopped: datetime | None = None) -> dict | None:
