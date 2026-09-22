@@ -1,0 +1,12 @@
+{
+  "session_id": "abc123",
+  "cwd": "__ROOT__",
+  "transcript_path": "__ROOT__/transcript.jsonl",
+  "prompt_id": "p-1",
+  "hook_event_name": "Stop",
+  "permission_mode": "default",
+  "stop_hook_active": false,
+  "last_assistant_message": "LAST_MESSAGE",
+  "background_tasks": [],
+  "session_crons": []
+}

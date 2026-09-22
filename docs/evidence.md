@@ -178,3 +178,78 @@ for anyone who decides not to install this.
 - **Overrides can still be routed around** by asking the agent to append the line from a
   shell. Documented in the README rather than closed, because closing it means policing
   the user's own terminal.
+
+---
+
+## 7. Hook spike (activity-trail T1, 2026-09-22)
+
+Settles risk A3 of `.spark/activity-trail/spec.md`: which hook events a **plugin** receives,
+and what their payloads carry. Run against `claude --version` → `2.1.280 (Claude Code)`,
+macOS.
+
+**Probe.** A throwaway plugin (deleted after the run) registered one command hook on each of
+`UserPromptSubmit`, `Stop`, `Notification`, `PermissionRequest`, `SubagentStart`,
+`SubagentStop`, `SessionStart`, `SessionEnd`, `PreCompact`, plus `PreToolUse`/`PostToolUse`
+matching `Task|Agent|AskUserQuestion`. It appended key names, enum-like values, ids, string
+**lengths** and a wall-clock ms stamp to a scratch file outside any repo — never content.
+Loaded with `claude --plugin-dir <probe>`, in an empty scratch directory:
+
+1. headless: `claude -p --plugin-dir <probe> "<launch 2 parallel general-purpose agents, then resume one via SendMessage>"`;
+2. interactive, driven by the author: Bash commands answered at the permission prompt, ≥ 90 s idle, `/clear`, `/exit`;
+3. headless: a request to call `AskUserQuestion`.
+
+**What fired, and what it carries**
+
+| Event | Fired as plugin hook | Relevant keys (besides `session_id`, `cwd`, `transcript_path`, `prompt_id`) |
+|---|---|---|
+| `UserPromptSubmit` | yes (headless + interactive) | `prompt` (content — never read), `permission_mode` |
+| `Stop` | yes | `last_assistant_message` (content), `stop_hook_active`, `background_tasks`, `session_crons` |
+| `SubagentStart` | yes | `agent_id`, `agent_type` — **no** description, **no** `tool_use_id` |
+| `SubagentStop` | yes | `agent_id`, `agent_type`, `agent_transcript_path`, `last_assistant_message` — **no `stop_reason`** |
+| `PreToolUse` on the subagent tool | yes | `tool_name` is **`Agent`**; `tool_input` has `description`, `prompt`, `subagent_type`, `run_in_background`; `tool_use_id` |
+| `Notification` | yes (interactive only) | `notification_type`, `message` (content) |
+| `PermissionRequest` | yes (interactive only) | `tool_name`, `tool_input`, `permission_suggestions` |
+| `SessionEnd` | yes | `reason` |
+
+**Findings**
+
+- **Pairing by `agent_id` holds.** Two parallel runs of the same type got distinct ids, and
+  each `SubagentStop` carried its own start's id. A run resumed through `SendMessage` fires a
+  **new `SubagentStart` with the same `agent_id`**, then its own stop — so "latest unmatched
+  start" (plan D3) measures only the resumed run.
+- **Harness-internal subagents.** The interactive session produced three `SubagentStop`
+  events with `agent_type: ""` and **no** `SubagentStart` before them. The existing trail
+  already skips an empty `agent_type`; activity must do the same, or every such stop becomes a
+  `duration_ms: null` run.
+- **Notification types observed:** `permission_prompt` and `idle_prompt`. `idle_prompt`
+  arrived ~60 s after the last `Stop`, twice in one idle stretch. No other type was seen.
+- **`permission_prompt` is late.** It fired **5.98 s** after the matching `PermissionRequest`,
+  and only for a prompt still unanswered at that point; the four prompts answered within
+  ~3 s produced a `PermissionRequest` but **no** `permission_prompt` notification.
+  `PermissionRequest` fires when the dialog is raised. Screen-vs-hook latency was not
+  measured with a clock on the screen; `PermissionRequest` is the earliest signal available.
+- **`AskUserQuestion` not observed.** The tool is unavailable in `-p` mode (the model
+  replied "no tool"), and in the interactive run it was not called. No `PreToolUse`, no
+  notification type for a question was recorded.
+- **`SessionEnd.reason` values:** `clear` (`/clear`), `prompt_input_exit` (`/exit`),
+  `other` (end of a `-p` run). `/clear` is followed at once by a `SessionStart` with
+  `source: "clear"` and a **new** `session_id`.
+- **Synthetic prompts.** A resumed background agent's result was delivered back into the
+  headless session as a prompt and fired `UserPromptSubmit` (`busy/prompt`) with no user
+  involved.
+
+**T1 outcome table** (plan §3)
+
+| Row | Result |
+|---|---|
+| UserPromptSubmit / Stop delivered to plugin hooks | **Go** |
+| SubagentStart available | **Go** — no description on it, so the label comes from `PreToolUse` on `Agent` (plan D6 pending-file variant) |
+| `agent_id` equal between Start and Stop | **Go** (parallel same-type and resumed run both checked) |
+| Notification type tells a prompt from an idle reminder | **Go** for the type field (`permission_prompt` vs `idle_prompt`) — but see timing row |
+| Permission notification within 2 s of the prompt | **Degrade** for `Notification` (5.98 s, and absent when answered within ~6 s). `PermissionRequest` fires at dialog time → proposed as the source of `waiting/permission` (deviation D-T1-1) |
+| AskUserQuestion fires a distinguishable signal | **Degrade** — not observable here; `question` is not recorded this cycle (reasons are "e.g." in AC-1.3) |
+| SessionEnd available | **Go** — reasons `clear`, `prompt_input_exit`, `other` |
+| Short description in the subagent tool's input | **Go** — `tool_input.description` |
+
+**Fixtures.** Redacted payloads with the observed key sets, content replaced by marker
+strings, paths by `__ROOT__`: `tests/fixtures/payloads/{user_prompt_submit,stop,notification_permission,notification_idle,permission_request,subagent_start,subagent_stop_internal,session_end,pre_tool_use_task}.json`.

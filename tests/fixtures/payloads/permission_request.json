@@ -1,0 +1,18 @@
+{
+  "session_id": "abc123",
+  "cwd": "__ROOT__",
+  "transcript_path": "__ROOT__/transcript.jsonl",
+  "prompt_id": "p-1",
+  "hook_event_name": "PermissionRequest",
+  "permission_mode": "default",
+  "tool_name": "Bash",
+  "tool_input": {
+    "command": "TOOL_COMMAND",
+    "description": "TOOL_DESCRIPTION"
+  },
+  "permission_suggestions": [
+    {
+      "type": "addRules"
+    }
+  ]
+}

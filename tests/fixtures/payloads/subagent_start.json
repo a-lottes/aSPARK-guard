@@ -1,0 +1,9 @@
+{
+  "session_id": "abc123",
+  "cwd": "__ROOT__",
+  "transcript_path": "__ROOT__/transcript.jsonl",
+  "prompt_id": "p-1",
+  "hook_event_name": "SubagentStart",
+  "agent_id": "a26e028603b8b4f58",
+  "agent_type": "aspark:product-owner"
+}

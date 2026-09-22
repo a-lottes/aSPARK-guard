@@ -1,0 +1,16 @@
+{
+  "session_id": "abc123",
+  "cwd": "__ROOT__",
+  "transcript_path": "__ROOT__/transcript.jsonl",
+  "prompt_id": "p-1",
+  "hook_event_name": "PreToolUse",
+  "permission_mode": "default",
+  "tool_name": "Agent",
+  "tool_use_id": "toolu_01VkmZc4udGp39rok3AapuR5",
+  "tool_input": {
+    "description": "Write the spec",
+    "prompt": "SUBAGENT_PROMPT",
+    "run_in_background": false,
+    "subagent_type": "aspark:product-owner"
+  }
+}

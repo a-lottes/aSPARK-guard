@@ -1,0 +1,8 @@
+{
+  "session_id": "abc123",
+  "cwd": "__ROOT__",
+  "transcript_path": "__ROOT__/transcript.jsonl",
+  "prompt_id": "p-1",
+  "hook_event_name": "SessionEnd",
+  "reason": "clear"
+}
