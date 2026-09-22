@@ -253,3 +253,51 @@ Loaded with `claude --plugin-dir <probe>`, in an empty scratch directory:
 
 **Fixtures.** Redacted payloads with the observed key sets, content replaced by marker
 strings, paths by `__ROOT__`: `tests/fixtures/payloads/{user_prompt_submit,stop,notification_permission,notification_idle,permission_request,subagent_start,subagent_stop_internal,session_end,pre_tool_use_task}.json`.
+
+---
+
+## 8. Activity-trail cost and final counts (T12, 2026-09-22)
+
+Machine: Intel Core i5-7360U (2 cores), macOS, **heavily loaded** — load average 7–105
+during the runs. Hooks run under the machine's `python3`, here `/usr/bin/python3`
+3.9.6. Every number below comes from:
+
+```bash
+/usr/bin/python3 tests/bench_hooks.py 50 /usr/bin/python3
+```
+
+**Per invocation, as the harness pays it** (own process, payload on stdin; second run, load ≈ 7–9):
+
+| | median | p95 | max |
+|---|---|---|---|
+| bare interpreter start (`python3 -c pass`) | 78 ms | 111 ms | 147 ms |
+| new activity hooks, project with `.spark/` | 202–233 ms | 292–378 ms | 302–626 ms |
+| new activity hooks, project without `.spark/` | 194–246 ms | 241–462 ms | 296–682 ms |
+| new activity hooks, log at the 2 MB mark | 197–257 ms | 219–381 ms | 279–559 ms |
+| existing gate/ledger hooks (`Write`), same run | 205–227 ms | 296–489 ms | 350–566 ms |
+
+**Before vs after, interleaved** (60 runs each, same shell, `git worktree` at `208a00c`):
+`pre-tool-use` 219 → 203 ms median, `post-tool-use` 210 → 216 ms median. No regression
+beyond noise.
+
+**The guard's own share, in-process** (handler only, after import): `user-prompt-submit`,
+`stop`, `subagent-start` ≈ 1 ms median / ≤ 6 ms p95; `subagent-stop` 4 ms median. At the
+2 MB mark, with realistic agent ids, the pairing scan over both generations costs
+`subagent-stop` **12 ms median / 16 ms p95 / 18 ms max**. Importing `aspark_guard.cli`
+costs 85–140 ms here (`python3 -X importtime`), paid by every hook, old and new.
+
+**Verdict on NFR-1 (p95 ≤ 100 ms, max ≤ 500 ms): not met on this machine, and not
+attributable to this feature.** The bare interpreter's own p95 (111 ms) is already above
+the bound, and the pre-existing hooks miss it by the same margin as the new ones. The
+activity work itself is ≤ 16 ms p95. The absolute bound needs a re-run on an unloaded
+machine (the 47 ms figure in §5 came from an M-series Mac).
+
+**Added cost per unit of work, projects without `.spark/` included:** each prompt now
+pays 2 extra hook starts (`UserPromptSubmit`, `Stop`); each subagent 3 (`Agent` launch,
+`SubagentStart`, `SubagentStop`); each permission dialog and each session end 1. On this
+machine that is ~200 ms per start; on the M-series figure of §5, ~50 ms.
+
+**Counts.** Full suite: **206 tests, OK** (`python3.13 -m unittest discover -s tests`;
+the suite needs ≥ 3.10, see plan D-T1-5). `wc -l src/aspark_guard/*.py` → **1,980**
+lines, as stated in the README. The only edited existing assertion is `EXPECTED_EVENTS`
+in `tests/test_install.py` (plan ruling Q1).

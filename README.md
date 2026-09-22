@@ -409,7 +409,7 @@ once and isn't any more). The only subprocess it ever spawns is `git rev-parse -
 python3 -m unittest discover -s tests -t tests
 ```
 
-142 tests, no dependencies, no network, no Claude Code required. Three layers:
+206 tests, no dependencies, no network, no Claude Code required. Three layers:
 
 - **Behaviour against fixtures** — one artifact state per fixture: draft, approved,
   uninstantiated template, broken header table.
