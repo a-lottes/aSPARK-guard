@@ -8,7 +8,7 @@
             "type": "command",
             "command": "python3 \"${CLAUDE_PLUGIN_ROOT}/bin/guard.py\" pre-tool-use",
             "timeout": 5,
-            "statusMessage": "Checking SPARK gate…"
+            "statusMessage": "Checking SPARK gate\u2026"
           }
         ]
       }
@@ -42,6 +42,28 @@
           {
             "type": "command",
             "command": "python3 \"${CLAUDE_PLUGIN_ROOT}/bin/guard.py\" session-start",
+            "timeout": 5
+          }
+        ]
+      }
+    ],
+    "UserPromptSubmit": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 \"${CLAUDE_PLUGIN_ROOT}/bin/guard.py\" user-prompt-submit",
+            "timeout": 5
+          }
+        ]
+      }
+    ],
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 \"${CLAUDE_PLUGIN_ROOT}/bin/guard.py\" stop",
             "timeout": 5
           }
         ]

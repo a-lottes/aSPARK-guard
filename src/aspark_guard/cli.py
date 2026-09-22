@@ -15,9 +15,16 @@ import json
 import sys
 from pathlib import Path
 
-from . import artifacts, config, drift, ledger, overrides, rules, templates, trail
+from . import activity, artifacts, config, drift, ledger, overrides, rules, templates, trail
 
-EVENTS = ("pre-tool-use", "post-tool-use", "subagent-stop", "session-start")
+EVENTS = (
+    "pre-tool-use",
+    "post-tool-use",
+    "subagent-stop",
+    "session-start",
+    "user-prompt-submit",
+    "stop",
+)
 
 
 def _read_event(stream) -> dict:
@@ -218,11 +225,36 @@ def handle_session_start(event: dict) -> int:
     return 0
 
 
+def _record_state(event: dict, state: str, reason: str) -> int:
+    """Log a session's state. Writes nothing to stdout: on UserPromptSubmit plain
+    output is added to the model's context, and the activity log must never be."""
+    root = _root_for(event)
+    if root is None:
+        return 0
+
+    settings = config.load(root)
+    if settings.activity:
+        activity.record_state(root, event, state, reason)
+    return 0
+
+
+def handle_user_prompt_submit(event: dict) -> int:
+    """A prompt arrived — the user's, or one the harness delivers on its own."""
+    return _record_state(event, "busy", "prompt")
+
+
+def handle_stop(event: dict) -> int:
+    """The main session finished its turn. Subagents still running are not ended here."""
+    return _record_state(event, "idle", "stop")
+
+
 HANDLERS = {
     "pre-tool-use": handle_pre_tool_use,
     "post-tool-use": handle_post_tool_use,
     "subagent-stop": handle_subagent_stop,
     "session-start": handle_session_start,
+    "user-prompt-submit": handle_user_prompt_submit,
+    "stop": handle_stop,
 }
 
 

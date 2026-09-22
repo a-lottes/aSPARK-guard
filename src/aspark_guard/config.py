@@ -25,6 +25,7 @@ DEFAULTS = {
     "ledger": True,
     "drift_check": True,
     "trail": True,
+    "activity": True,
     "template_check": True,
     "rules": DEFAULT_RULES,
 }
@@ -59,6 +60,10 @@ class Config:
     @property
     def trail(self) -> bool:
         return self.enabled and bool(self._data["trail"])
+
+    @property
+    def activity(self) -> bool:
+        return self.enabled and bool(self._data["activity"])
 
     @property
     def template_check(self) -> bool:

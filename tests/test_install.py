@@ -23,7 +23,10 @@ from support import REPO_ROOT, GuardTestCase
 MANIFEST = REPO_ROOT / "hooks" / "hooks.json"
 PLUGIN_MANIFEST = REPO_ROOT / ".claude-plugin" / "plugin.json"
 
-EXPECTED_EVENTS = {"PreToolUse", "PostToolUse", "SubagentStop", "SessionStart"}
+EXPECTED_EVENTS = {
+    "PreToolUse", "PostToolUse", "SubagentStop", "SessionStart",
+    "UserPromptSubmit", "Stop",
+}
 
 
 def hook_commands() -> dict[str, str]:
@@ -121,6 +124,20 @@ class TestInstalledCopyRuns(GuardTestCase):
                 result = self.run_hook_command(event, payload)
                 self.assertEqual(result.returncode, 0, result.stderr)
                 self.assertEqual(result.stderr, "", result.stderr)
+
+    def test_the_activity_commands_run_from_a_path_with_a_space(self):
+        for event in ("UserPromptSubmit", "Stop"):
+            with self.subTest(event=event):
+                result = self.run_hook_command(
+                    event, {"cwd": str(self.project), "session_id": "s1"}
+                )
+                self.assertEqual(result.returncode, 0, result.stderr)
+                self.assertEqual(result.stderr, "", result.stderr)
+                self.assertEqual(result.stdout, "")
+
+        log = self.project / ".spark" / ".guard" / "activity.jsonl"
+        states = [json.loads(line)["state"] for line in log.read_text(encoding="utf-8").splitlines()]
+        self.assertEqual(states, ["busy", "idle"])
 
     def test_a_fresh_install_needs_no_setup_at_all(self):
         # No config file, no directories created by hand, no build step: the first
