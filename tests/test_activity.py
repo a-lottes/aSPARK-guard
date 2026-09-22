@@ -376,6 +376,42 @@ class TestTaskLabel(ActivityTestCase):
         self.assertFalse(activity.pending_path(self.root).exists())
 
 
+class TestScan(ActivityTestCase):
+    def scan(self) -> str:
+        import io
+        from contextlib import redirect_stdout
+
+        from aspark_guard import cli
+
+        buffer = io.StringIO()
+        with redirect_stdout(buffer):
+            cli.main(["scan", str(self.root)])
+        return buffer.getvalue()
+
+    def test_scan_counts_current_and_rotated_lines_and_reports_the_size(self):
+        from aspark_guard import activity
+
+        self.hook("user-prompt-submit", "user_prompt_submit.json")
+        self.hook("stop", "stop.json")
+        rotated = activity.rotated_path(self.root)
+        rotated.write_text('{"v": 1}\n{"v": 1}\n{"v": 1}\n', encoding="utf-8")
+        size = self.activity_file.stat().st_size
+        before = self.tree()
+
+        out = self.scan()
+
+        self.assertIn("activity lines:  5 (current + rotated)", out)
+        self.assertIn(f"activity size:   {size} bytes", out)
+        self.assertEqual(self.tree(), before, "scan is read-only")
+
+    def test_scan_without_a_log_prints_zero_and_creates_nothing(self):
+        before = self.tree()
+        out = self.scan()
+        self.assertIn("activity lines:  0", out)
+        self.assertIn("activity size:   0 bytes", out)
+        self.assertEqual(self.tree(), before)
+
+
 class TestSwitch(ActivityTestCase):
     def test_activity_false_writes_nothing(self):
         self.write_config({"activity": False})

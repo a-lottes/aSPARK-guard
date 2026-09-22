@@ -326,6 +326,11 @@ def _scan(argv: list[str]) -> int:
     tracked = list(artifacts.iter_artifacts(root))
     entries = list(ledger.read_entries(root))
     runs = list(trail.read_entries(root))
+    activity_lines = sum(1 for _ in activity.read_entries(root))
+    try:
+        activity_size = activity.activity_path(root).stat().st_size
+    except OSError:
+        activity_size = 0
     drifted = drift.find_drifted(root)
     contract = [
         (artifacts.relative_to_root(path, root), findings)
@@ -339,6 +344,8 @@ def _scan(argv: list[str]) -> int:
     print(f"artifacts:       {len(tracked)}")
     print(f"ledger entries:  {len(entries)}")
     print(f"agent runs:      {len(runs)}")
+    print(f"activity lines:  {activity_lines} (current + rotated)")
+    print(f"activity size:   {activity_size} bytes (rotates at {activity.MAX_BYTES})")
     print(f"template drift:  {len(contract)} artifact(s)")
     for rel, findings in contract:
         for finding in findings:
