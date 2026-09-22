@@ -25,7 +25,7 @@ PLUGIN_MANIFEST = REPO_ROOT / ".claude-plugin" / "plugin.json"
 
 EXPECTED_EVENTS = {
     "PreToolUse", "PostToolUse", "SubagentStop", "SessionStart",
-    "UserPromptSubmit", "Stop",
+    "UserPromptSubmit", "Stop", "PermissionRequest", "SessionEnd",
 }
 
 
@@ -63,6 +63,12 @@ class TestManifestShape(unittest.TestCase):
         manifest = json.loads(MANIFEST.read_text(encoding="utf-8"))
         for event in ("PreToolUse", "PostToolUse"):
             self.assertEqual(manifest["hooks"][event][0]["matcher"], "Write|Edit")
+
+    def test_notification_is_not_hooked_so_idle_reminders_never_start_the_guard(self):
+        # D-T1-1: `waiting` comes from PermissionRequest; an `idle_prompt`
+        # notification must not flip an idle session to waiting (AC-1.3).
+        manifest = json.loads(MANIFEST.read_text(encoding="utf-8"))
+        self.assertNotIn("Notification", manifest["hooks"])
 
     def test_the_two_manifests_agree_on_the_plugin_name(self):
         plugin = json.loads(PLUGIN_MANIFEST.read_text(encoding="utf-8"))
@@ -126,7 +132,7 @@ class TestInstalledCopyRuns(GuardTestCase):
                 self.assertEqual(result.stderr, "", result.stderr)
 
     def test_the_activity_commands_run_from_a_path_with_a_space(self):
-        for event in ("UserPromptSubmit", "Stop"):
+        for event in ("UserPromptSubmit", "Stop", "PermissionRequest", "SessionEnd"):
             with self.subTest(event=event):
                 result = self.run_hook_command(
                     event, {"cwd": str(self.project), "session_id": "s1"}
@@ -137,7 +143,7 @@ class TestInstalledCopyRuns(GuardTestCase):
 
         log = self.project / ".spark" / ".guard" / "activity.jsonl"
         states = [json.loads(line)["state"] for line in log.read_text(encoding="utf-8").splitlines()]
-        self.assertEqual(states, ["busy", "idle"])
+        self.assertEqual(states, ["busy", "idle", "waiting", "ended"])
 
     def test_a_fresh_install_needs_no_setup_at_all(self):
         # No config file, no directories created by hand, no build step: the first

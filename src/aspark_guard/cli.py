@@ -24,6 +24,8 @@ EVENTS = (
     "session-start",
     "user-prompt-submit",
     "stop",
+    "permission-request",
+    "session-end",
 )
 
 
@@ -248,6 +250,20 @@ def handle_stop(event: dict) -> int:
     return _record_state(event, "idle", "stop")
 
 
+def handle_permission_request(event: dict) -> int:
+    """A permission dialog is up: Claude is waiting for the user.
+
+    This hook can also decide the request; it never does. Empty stdout leaves the
+    harness's own dialog exactly as it would be without the guard.
+    """
+    return _record_state(event, "waiting", "permission")
+
+
+def handle_session_end(event: dict) -> int:
+    """A clean end. A killed session gets no line at all — nothing is written for it."""
+    return _record_state(event, "ended", activity.end_reason(event))
+
+
 HANDLERS = {
     "pre-tool-use": handle_pre_tool_use,
     "post-tool-use": handle_post_tool_use,
@@ -255,6 +271,8 @@ HANDLERS = {
     "session-start": handle_session_start,
     "user-prompt-submit": handle_user_prompt_submit,
     "stop": handle_stop,
+    "permission-request": handle_permission_request,
+    "session-end": handle_session_end,
 }
 
 

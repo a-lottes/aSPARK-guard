@@ -37,6 +37,11 @@ LOCK_DEADLINE_S = 0.5
 GITIGNORE_TEXT = "/.gitignore\n/activity*\n"
 
 
+# `SessionEnd.reason` values seen in the T1 spike. Anything else is `other`, so no
+# harness-supplied string ever reaches the log unchecked.
+END_REASONS = frozenset({"clear", "prompt_input_exit", "logout", "other"})
+
+
 def activity_path(root: Path) -> Path:
     return Path(root) / ACTIVITY_RELPATH
 
@@ -149,6 +154,11 @@ def _ensure_gitignore(guard_dir: Path) -> None:
 
 def record_state(root: Path, event: dict, state: str, reason: str) -> dict | None:
     return record(root, "session_state", event, state=state, reason=reason)
+
+
+def end_reason(event: dict) -> str:
+    value = event.get("reason")
+    return value if isinstance(value, str) and value in END_REASONS else "other"
 
 
 def read_entries(root: Path):

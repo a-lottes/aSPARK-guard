@@ -4,7 +4,7 @@
 Usage (from `hooks/hooks.json`, with the payload on stdin):
 
     guard.py pre-tool-use | post-tool-use | subagent-stop | session-start
-             | user-prompt-submit | stop
+             | user-prompt-submit | stop | permission-request | session-end
 
 And, for checking an install by hand:
 

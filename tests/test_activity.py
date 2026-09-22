@@ -83,6 +83,71 @@ class TestSessionState(ActivityTestCase):
         self.assertIsNone(entry["session_id"])
 
 
+class TestWaitingAndEnded(ActivityTestCase):
+    def test_a_permission_dialog_marks_the_session_waiting(self):
+        code, out = self.hook("permission-request", "permission_request.json")
+
+        self.assertEqual((code, out), (0, ""), "the guard never decides a permission")
+        [entry] = self.activity_entries()
+        self.assertEqual((entry["state"], entry["reason"]), ("waiting", "permission"))
+
+    def test_the_tool_input_of_the_request_is_not_recorded(self):
+        self.hook("permission-request", "permission_request.json")
+        text = self.activity_file.read_text(encoding="utf-8")
+        for marker in ("TOOL_COMMAND", "TOOL_DESCRIPTION", "Bash", "addRules"):
+            self.assertNotIn(marker, text)
+
+    def test_the_next_event_supersedes_waiting(self):
+        self.hook("permission-request", "permission_request.json")
+        self.hook("stop", "stop.json")
+        states = [e["state"] for e in self.activity_entries()]
+        self.assertEqual(states, ["waiting", "idle"])
+
+    def test_session_end_records_the_allowlisted_reason(self):
+        for reason in ("clear", "prompt_input_exit", "logout", "other"):
+            with self.subTest(reason=reason):
+                self.hook("session-end", "session_end.json", reason=reason)
+                entry = self.activity_entries()[-1]
+                self.assertEqual((entry["state"], entry["reason"]), ("ended", reason))
+
+    def test_an_unknown_end_reason_is_recorded_as_other(self):
+        for reason in ("resume", "SECRET_REASON", "", 7, None):
+            with self.subTest(reason=reason):
+                self.hook("session-end", "session_end.json", reason=reason)
+                self.assertEqual(self.activity_entries()[-1]["reason"], "other")
+        self.assertNotIn("SECRET_REASON", self.activity_file.read_text(encoding="utf-8"))
+
+    def test_two_sessions_interleave_and_filter_cleanly(self):
+        sequence = [
+            ("user-prompt-submit", "user_prompt_submit.json", "s1"),
+            ("user-prompt-submit", "user_prompt_submit.json", "s2"),
+            ("permission-request", "permission_request.json", "s1"),
+            ("stop", "stop.json", "s2"),
+            ("stop", "stop.json", "s1"),
+            ("session-end", "session_end.json", "s2"),
+        ]
+        for command, fixture, sid in sequence:
+            self.hook(command, fixture, session_id=sid)
+
+        by_session = {}
+        for entry in self.activity_entries():
+            by_session.setdefault(entry["session_id"], []).append(entry["state"])
+        self.assertEqual(by_session["s1"], ["busy", "waiting", "idle"])
+        self.assertEqual(by_session["s2"], ["busy", "idle", "ended"])
+
+    def test_a_killed_session_gets_nothing_written_on_its_behalf(self):
+        # s1 goes quiet without an end; s2 starts, works and ends.
+        self.hook("user-prompt-submit", "user_prompt_submit.json", session_id="s1")
+        for command, fixture in (("user-prompt-submit", "user_prompt_submit.json"),
+                                 ("stop", "stop.json"), ("session-end", "session_end.json")):
+            self.hook(command, fixture, session_id="s2")
+
+        s1 = [e for e in self.activity_entries() if e["session_id"] == "s1"]
+        self.assertEqual([e["state"] for e in s1], ["busy"], "its last line stays its last")
+        states = {e["state"] for e in self.activity_entries()}
+        self.assertNotIn("abandoned", states)
+
+
 class TestSwitch(ActivityTestCase):
     def test_activity_false_writes_nothing(self):
         self.write_config({"activity": False})
