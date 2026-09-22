@@ -1,3 +1,4 @@
-# The guard's own logs are append-only: a cross-branch conflict is never a
-# conflicting edit, only a conflicting file.
-.spark/.guard/*.jsonl merge=union
+# The guard's committed logs are append-only: a cross-branch conflict is never a
+# conflicting edit, only a conflicting file. The activity log is local and ignored.
+.spark/.guard/ledger.jsonl merge=union
+.spark/.guard/trail.jsonl merge=union

@@ -241,6 +241,58 @@ Three things are deliberately *not* recorded: writes outside `.spark/`, the guar
 files, and a write that leaves the content byte-identical to the last entry (a no-op
 edit, or a write the tool ultimately failed to make).
 
+### `.spark/.guard/activity.jsonl` — local, never committed
+
+What the team is doing right now, so a read-only cockpit can show it from the project
+alone: whether each session is busy, idle, waiting or ended, and which subagents are
+running and for how long. **Metadata only, never content** — no prompt, tool input,
+tool output, message or thinking is written; every value is an id the harness assigned,
+a timestamp, or drawn from a fixed list. Paths aren't recorded at all.
+
+```json
+{"v":1,"ts":"2026-09-22T10:00:00.123Z","event":"session_state","session_id":"abc123","state":"busy","reason":"prompt"}
+{"v":1,"ts":"2026-09-22T10:00:04.310Z","event":"subagent_start","session_id":"abc123","agent_id":"a26e028603b8b4f58",
+ "agent_type":"aspark:product-owner","feature":"weekly-stats","task":"Write the spec"}
+{"v":1,"ts":"2026-09-22T10:03:11.902Z","event":"agent_run","session_id":"abc123","agent_id":"a26e028603b8b4f58",
+ "agent_type":"aspark:product-owner","feature":"weekly-stats","duration_ms":187592}
+```
+
+| `event` | Written on | Fields besides `v`, `ts` (UTC, ms), `session_id` |
+|---|---|---|
+| `session_state` | `UserPromptSubmit` → `busy`/`prompt`; `Stop` → `idle`/`stop`; `PermissionRequest` → `waiting`/`permission`; `SessionEnd` → `ended`/`clear` \| `prompt_input_exit` \| `logout` \| `other` | `state`, `reason` |
+| `subagent_start` | `SubagentStart` | `agent_id`, `agent_type`, `feature`, `task` |
+| `agent_run` | `SubagentStop` | `agent_id`, `agent_type`, `feature`, `duration_ms` |
+
+- `task` is the short description the main session gave the run (from the `Agent`
+  tool's launch), cleaned to one line of at most 80 characters — never its prompt.
+  It is `null` when there is none, or when two launches of the same type are waiting
+  at once and the guard can't tell which start is which.
+- `duration_ms` is measured from the latest unfinished start of that `agent_id` in the
+  same session, so a resumed agent gets the length of its latest run only. `null` when
+  the start isn't in the log. There is no `stop_reason`: the harness doesn't send one,
+  and the guard doesn't make one up. The trail above is unchanged.
+- `feature` is the same inference the trail makes, and `null` before the session has
+  written an artifact.
+
+**Reading it.** A session's state is its latest `session_state`. Any later line of that
+session supersedes `waiting`. Because ordinary tool calls aren't hooked, **`waiting` can
+stay on after you have answered**, until the session's next recorded event. A question
+Claude asks you (`AskUserQuestion`) is not shown as `waiting`; only a permission dialog
+is. Only facts are written: **a session with no `ended` line may have been killed**, and
+a subagent start with no `agent_run` is over if its session ended — deciding when a
+silent session counts as stale is up to the reader. `v` goes up whenever an event name,
+a field or its meaning changes; a reader should refuse a `v` it doesn't know.
+
+**Bounded and local.** At 2 MB the file rotates to `activity.jsonl.1`, replacing the
+previous generation, so at most ~4 MB are ever on disk. Every append and rotation holds
+one lock (`activity.lock`), so parallel sessions can't break or lose lines. Next to it,
+`activity.pending.jsonl` holds a launch's label until its start arrives — an
+unclaimed one is ignored after 60 s. On its first write the guard creates `.spark/.guard/.gitignore`, which
+ignores `activity*` and itself — so none of these ever shows up in `git status`, while
+the ledger and the trail stay visible and committable. An existing `.gitignore` there is
+never touched. `guard.py scan .` shows the log's line count and size;
+`"activity": false` switches it off.
+
 ### Drift detection at session start
 
 If an artifact's current content differs from its last ledger entry, it was edited
@@ -282,12 +334,14 @@ Check that it sees your project:
 python3 /path/to/aSPARK-guard/bin/guard.py scan .
 ```
 
-**Recommended, one line, once per project** — the logs are append-only, so a conflict
+**Recommended, once per project** — the committed logs are append-only, so a conflict
 between two branches is never a conflicting edit, only a conflicting file:
 
 ```bash
-echo '.spark/.guard/*.jsonl merge=union' >> .gitattributes
+printf '.spark/.guard/ledger.jsonl merge=union\n.spark/.guard/trail.jsonl merge=union\n' >> .gitattributes
 ```
+
+The activity log isn't committed, so it needs no merge rule.
 
 The guard will not write this for you. It never touches anything outside `.spark/`.
 
@@ -303,6 +357,7 @@ Optional, at `.spark/guard.json`. Absent or malformed means these defaults:
   "ledger": true,          // record writes            (M1)
   "drift_check": true,     // report outside edits     (M1)
   "trail": true,           // agent-run trail          (M4)
+  "activity": true,        // live activity log        (activity-trail)
   "template_check": true,  // template contract        (M4)
   "rules": {               // "block" | "warn" | "off"
     "plan-requires-approved-spec":  "block",
@@ -329,7 +384,11 @@ Non-negotiable, and tested:
    files. Measured at **~47 ms per invocation** on an M-series Mac — of which roughly
    40 ms is the Python interpreter starting up, not the guard working. That cost is
    paid on every `Write`/`Edit` in every project, including ones with no `.spark/`
-   directory, and it is the honest price of the current design.
+   directory, and it is the honest price of the current design. The activity log adds
+   hooks on 9 events in all (10 entries): per prompt `UserPromptSubmit` and `Stop`, per
+   subagent the `Agent` launch, `SubagentStart` and `SubagentStop`, plus each permission
+   dialog and session end — none on ordinary tool calls. Measured cost:
+   [`docs/evidence.md`](docs/evidence.md) §8.
 4. **Never block silently.** Every denial names the rule, the state that triggered it,
    and the way forward. A block with no way out only teaches people to route around it.
 5. **State and form only, never quality.** Anything requiring judgment belongs to the
@@ -337,9 +396,10 @@ Non-negotiable, and tested:
 6. **No network, no LLM, no dependency.**
 
 Point 6 is not aesthetics. Plugin hooks **bypass the workspace-trust prompt**, so this
-code runs on other people's machines unasked. It stays standard-library-only, under a
-thousand lines, and readable in one sitting so that it can be audited by the people it
-runs for. The only subprocess it ever spawns is `git rev-parse --short HEAD`.
+code runs on other people's machines unasked. It stays standard-library-only and
+readable in one sitting so that it can be audited by the people it runs for:
+**1,980 lines** in `src/aspark_guard/` (`wc -l`, 2026-09-22; it was "under a thousand"
+once and isn't any more). The only subprocess it ever spawns is `git rev-parse --short HEAD`.
 
 ---
 
@@ -368,13 +428,14 @@ against real history is not optional.
 ```
 bin/guard.py              one entry point, one subcommand per hook event
 src/aspark_guard/
-  cli.py                  dispatch + the four handlers
+  cli.py                  dispatch + one handler per hook event
   artifacts.py            locating, classifying, hashing, status parsing
   ledger.py               the append-only chain
   drift.py                outside-edit detection
   overrides.py            reading, matching and suggesting override entries
   templates.py            the protected template structures
   trail.py                one line per finished subagent
+  activity.py             the live activity log: lock, rotation, pairing, labels
   config.py               .spark/guard.json
   gitinfo.py              the one subprocess
 ```
@@ -383,16 +444,22 @@ src/aspark_guard/
 
 ## Known limits
 
-- **POSIX only.** The hook command is `python3 …`; Windows needs a `py -3` fallback.
+- **POSIX only.** The hook command is `python3 …`; Windows needs a `py -3` fallback, and
+  the activity log's lock uses `fcntl`, which Windows doesn't have.
 - **A determined route around it exists** and always will: a hook cannot distinguish
   "the agent decided this" from "the user dictated it". See *Overriding a gate*.
 - **The ledger is only as honest as the repo.** Nothing stops a force-push. Integrity
   here rests on git, not on the guard.
 - **~50 ms on every `Write`/`Edit`, everywhere** — including repos with no `.spark/`
   directory, where the guard does nothing. Mostly Python interpreter startup. This is
-  the strongest argument against installing it.
-- **Untested: concurrent sessions.** Two agents writing `.spark/` at once both append to
-  the ledger; POSIX append should keep whole lines intact, but that has not been shown.
+  the strongest argument against installing it. The activity hooks add the same per
+  prompt, per turn end and per subagent (see *Invariants*, point 3).
+- **Untested: concurrent sessions on the ledger.** Two agents writing `.spark/` at once
+  both append to the ledger; POSIX append should keep whole lines intact, but that has
+  not been shown. The activity log is locked and tested with two writers across a
+  rotation.
+- **`waiting` is coarse.** It comes from permission dialogs only, and can outlive your
+  answer until the session's next hooked event (see *What it records*).
 - **Not proven in a real project yet.** Everything above is tested; none of it has run a
   full feature loop on someone else's repo. [`docs/evidence.md`](docs/evidence.md) lists
   exactly what has and has not been exercised.
