@@ -26,6 +26,7 @@ EVENTS = (
     "stop",
     "permission-request",
     "session-end",
+    "subagent-start",
 )
 
 
@@ -264,6 +265,18 @@ def handle_session_end(event: dict) -> int:
     return _record_state(event, "ended", activity.end_reason(event))
 
 
+def handle_subagent_start(event: dict) -> int:
+    """A subagent started, so the cockpit can show it running before it finishes."""
+    root = _root_for(event)
+    if root is None:
+        return 0
+
+    settings = config.load(root)
+    if settings.activity:
+        activity.record_subagent_start(root, event)
+    return 0
+
+
 HANDLERS = {
     "pre-tool-use": handle_pre_tool_use,
     "post-tool-use": handle_post_tool_use,
@@ -273,6 +286,7 @@ HANDLERS = {
     "stop": handle_stop,
     "permission-request": handle_permission_request,
     "session-end": handle_session_end,
+    "subagent-start": handle_subagent_start,
 }
 
 

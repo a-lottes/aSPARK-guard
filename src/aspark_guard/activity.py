@@ -22,7 +22,7 @@ import time
 from datetime import datetime, timezone
 from pathlib import Path
 
-from . import ledger
+from . import ledger, trail
 
 FORMAT_VERSION = 1
 
@@ -154,6 +154,33 @@ def _ensure_gitignore(guard_dir: Path) -> None:
 
 def record_state(root: Path, event: dict, state: str, reason: str) -> dict | None:
     return record(root, "session_state", event, state=state, reason=reason)
+
+
+def _agent_type(event: dict) -> str | None:
+    value = event.get("agent_type")
+    return value if isinstance(value, str) and value else None
+
+
+def _agent_id(event: dict) -> str | None:
+    value = event.get("agent_id")
+    return value if isinstance(value, str) and value else None
+
+
+def record_subagent_start(root: Path, event: dict) -> dict | None:
+    """One line per subagent start. The harness's own helper agents carry an empty
+    `agent_type` (seen in the T1 spike); like the trail, they are not recorded."""
+    agent_type = _agent_type(event)
+    if agent_type is None:
+        return None
+    return record(
+        root,
+        "subagent_start",
+        event,
+        agent_id=_agent_id(event),
+        agent_type=agent_type,
+        feature=trail.feature_for_session(root, _session_id(event)),
+        task=None,
+    )
 
 
 def end_reason(event: dict) -> str:

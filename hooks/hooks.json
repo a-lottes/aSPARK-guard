@@ -90,6 +90,17 @@
           }
         ]
       }
+    ],
+    "SubagentStart": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 \"${CLAUDE_PLUGIN_ROOT}/bin/guard.py\" subagent-start",
+            "timeout": 5
+          }
+        ]
+      }
     ]
   }
 }

@@ -22,7 +22,7 @@ def trail_path(root: Path) -> Path:
     return Path(root) / TRAIL_RELPATH
 
 
-def _feature_for_session(root: Path, session_id: str | None) -> str | None:
+def feature_for_session(root: Path, session_id: str | None) -> str | None:
     """Best guess at which feature this run belongs to.
 
     A SubagentStop payload carries no file path, so the feature is inferred from the
@@ -52,7 +52,7 @@ def record_run(root: Path, event: dict) -> dict | None:
         "event": "agent_run",
         "agent_type": agent_type,
         "agent_id": event.get("agent_id"),
-        "feature": _feature_for_session(root, session_id if isinstance(session_id, str) else None),
+        "feature": feature_for_session(root, session_id if isinstance(session_id, str) else None),
         "stop_reason": event.get("stop_reason"),
         "session_id": session_id,
     }

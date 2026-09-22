@@ -148,6 +148,44 @@ class TestWaitingAndEnded(ActivityTestCase):
         self.assertNotIn("abandoned", states)
 
 
+class TestSubagentStart(ActivityTestCase):
+    def test_a_start_is_recorded_with_id_type_and_feature(self):
+        spec = self.write_fixture_artifact(".spark/weekly-stats/spec.md", "spec_approved.md")
+        self.post_tool_use(spec, session_id="abc123")
+
+        code, out = self.hook("subagent-start", "subagent_start.json")
+
+        self.assertEqual((code, out), (0, ""))
+        [entry] = self.activity_entries()
+        self.assertEqual(entry["event"], "subagent_start")
+        self.assertEqual(entry["agent_id"], "a26e028603b8b4f58")
+        self.assertEqual(entry["agent_type"], "aspark:product-owner")
+        self.assertEqual(entry["feature"], "weekly-stats")
+
+    def test_the_feature_is_the_one_the_trail_would_infer(self):
+        from aspark_guard import trail
+
+        spec = self.write_fixture_artifact(".spark/weekly-stats/spec.md", "spec_approved.md")
+        self.post_tool_use(spec, session_id="abc123")
+        self.hook("subagent-start", "subagent_start.json")
+        self.assertEqual(self.activity_entries()[0]["feature"],
+                         trail.feature_for_session(self.root, "abc123"))
+
+    def test_the_feature_is_null_before_the_session_wrote_anything(self):
+        self.hook("subagent-start", "subagent_start.json")
+        self.assertIsNone(self.activity_entries()[0]["feature"])
+
+    def test_a_harness_internal_agent_is_not_recorded(self):
+        self.hook("subagent-start", "subagent_start.json", agent_type="")
+        self.assertEqual(self.activity_entries(), [])
+
+    def test_an_ended_session_leaves_an_open_start_as_it_is(self):
+        self.hook("subagent-start", "subagent_start.json")
+        self.hook("session-end", "session_end.json")
+        events = [e["event"] for e in self.activity_entries()]
+        self.assertEqual(events, ["subagent_start", "session_state"], "no synthetic finish")
+
+
 class TestSwitch(ActivityTestCase):
     def test_activity_false_writes_nothing(self):
         self.write_config({"activity": False})
