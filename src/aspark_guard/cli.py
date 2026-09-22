@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import json
 import sys
+from datetime import datetime, timezone
 from pathlib import Path
 
 from . import activity, artifacts, config, drift, ledger, overrides, rules, templates, trail
@@ -199,15 +200,16 @@ def handle_post_tool_use(event: dict) -> int:
 
 def handle_subagent_stop(event: dict) -> int:
     """Record that a subagent finished, so agent runs can be counted from the repo."""
+    stopped = datetime.now(timezone.utc)
     root = _root_for(event)
     if root is None:
         return 0
 
     settings = config.load(root)
-    if not settings.trail:
-        return 0
-
-    trail.record_run(root, event)
+    if settings.trail:
+        trail.record_run(root, event)
+    if settings.activity:
+        activity.record_agent_run(root, event, stopped)
     return 0
 
 

@@ -183,6 +183,78 @@ def record_subagent_start(root: Path, event: dict) -> dict | None:
     )
 
 
+def record_agent_run(root: Path, event: dict, stopped: datetime | None = None) -> dict | None:
+    """One line per finished run, with its duration when its start is in the log.
+
+    No `stop_reason`: the harness doesn't send one (T1), and the guard never
+    fills in a default. A stop without a recorded start gets `duration_ms: null`.
+    """
+    # When the stop fired, not when this line gets written: the caller takes it on
+    # entry, before the trail and the scan below spend time of their own.
+    stopped = stopped or datetime.now(timezone.utc)
+    agent_type = _agent_type(event)
+    if agent_type is None:
+        return None
+    session_id = _session_id(event)
+    agent_id = _agent_id(event)
+    started = _open_start(root, session_id, agent_id)
+    duration_ms = None
+    if started is not None:
+        elapsed = stopped - started
+        duration_ms = max(0, int(elapsed.total_seconds() * 1000))
+    return record(
+        root,
+        "agent_run",
+        event,
+        agent_id=agent_id,
+        agent_type=agent_type,
+        feature=trail.feature_for_session(root, session_id),
+        duration_ms=duration_ms,
+    )
+
+
+def _open_start(root: Path, session_id: str | None, agent_id: str | None):
+    """When the latest unfinished run of this agent started, or None.
+
+    Paired from the log itself, so there is no second record to keep in step. A
+    resumed agent reuses its `agent_id` (T1), so only a start with no `agent_run`
+    after it counts. The substring check skips parsing every unrelated line.
+    """
+    if agent_id is None:
+        return None
+    opened = None
+    for path in (rotated_path(root), activity_path(root)):
+        try:
+            with open(path, "r", encoding="utf-8", errors="replace") as handle:
+                for line in handle:
+                    if agent_id not in line:
+                        continue
+                    try:
+                        entry = json.loads(line)
+                    except ValueError:
+                        continue
+                    if not isinstance(entry, dict):
+                        continue
+                    if entry.get("agent_id") != agent_id or entry.get("session_id") != session_id:
+                        continue
+                    if entry.get("event") == "subagent_start":
+                        opened = entry.get("ts")
+                    elif entry.get("event") == "agent_run":
+                        opened = None
+        except OSError:
+            continue
+    return _parse_ts(opened)
+
+
+def _parse_ts(value) -> datetime | None:
+    if not isinstance(value, str):
+        return None
+    try:
+        return datetime.strptime(value, "%Y-%m-%dT%H:%M:%S.%fZ").replace(tzinfo=timezone.utc)
+    except ValueError:
+        return None
+
+
 def end_reason(event: dict) -> str:
     value = event.get("reason")
     return value if isinstance(value, str) and value in END_REASONS else "other"

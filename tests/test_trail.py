@@ -124,5 +124,28 @@ class TestCounting(TrailTestCase):
         self.assertEqual({e["agent_type"] for e in entries}, set(roles))
 
 
+class TestTrailFormatIsUnchanged(TrailTestCase):
+    """activity-trail AC-2.7: the committed run counter keeps its exact byte form."""
+
+    def test_the_trail_line_has_the_same_keys_and_serialisation_as_before(self):
+        import json
+
+        self.subagent_stop()
+        [line] = self.trail_file.read_text(encoding="utf-8").splitlines()
+        entry = json.loads(line)
+
+        self.assertEqual(
+            set(entry),
+            {"ts", "event", "agent_type", "agent_id", "feature", "stop_reason", "session_id"},
+        )
+        self.assertRegex(entry["ts"], r"^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z$")
+        expected = {
+            "ts": entry["ts"], "event": "agent_run", "agent_type": "reviewer",
+            "agent_id": "sub-1", "feature": None, "stop_reason": "end_turn",
+            "session_id": "test-session",
+        }
+        self.assertEqual(line, json.dumps(expected, ensure_ascii=False, sort_keys=True))
+
+
 if __name__ == "__main__":
     unittest.main()

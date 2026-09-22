@@ -2,7 +2,9 @@
 
 import json
 import re
+import time
 import unittest
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 from support import FIXTURES, GuardTestCase
@@ -184,6 +186,116 @@ class TestSubagentStart(ActivityTestCase):
         self.hook("session-end", "session_end.json")
         events = [e["event"] for e in self.activity_entries()]
         self.assertEqual(events, ["subagent_start", "session_state"], "no synthetic finish")
+
+
+class TestAgentRun(ActivityTestCase):
+    def start(self, agent_id="a1", **extra):
+        return self.hook("subagent-start", "subagent_start.json", agent_id=agent_id, **extra)
+
+    def stop(self, agent_id="a1", **extra):
+        return self.run_hook("subagent-stop", {
+            "session_id": "abc123", "cwd": str(self.root), "hook_event_name": "SubagentStop",
+            "agent_id": agent_id, "agent_type": "aspark:product-owner", **extra,
+        })
+
+    def timed_stop(self, agent_id="a1") -> float:
+        """Stop the run and return the real gap, in ms, since its start line's `ts`.
+
+        The reference is measured, not the planned sleep: on a loaded machine a
+        sleep overshoots, and AC-2.2 is about the gap between the two events.
+        """
+        starts = [e for e in self.activity_entries()
+                  if e["event"] == "subagent_start" and e["agent_id"] == agent_id]
+        started = datetime.strptime(starts[-1]["ts"], "%Y-%m-%dT%H:%M:%S.%fZ").replace(
+            tzinfo=timezone.utc)
+        before = datetime.now(timezone.utc)
+        self.stop(agent_id)
+        return (before - started).total_seconds() * 1000
+
+    def runs(self) -> list[dict]:
+        return [e for e in self.activity_entries() if e["event"] == "agent_run"]
+
+    def test_the_duration_matches_the_gap_between_start_and_stop(self):
+        self.start()
+        time.sleep(0.3)
+        gap = self.timed_stop()
+
+        [run] = self.runs()
+        self.assertEqual((run["agent_id"], run["agent_type"]), ("a1", "aspark:product-owner"))
+        self.assertGreaterEqual(gap, 300)
+        self.assertAlmostEqual(run["duration_ms"], gap, delta=50)
+
+    def test_a_stop_writes_nothing_to_stdout(self):
+        self.start()
+        self.assertEqual(self.stop(), (0, ""))
+
+    def test_a_resumed_agent_measures_only_its_latest_run(self):
+        self.start()
+        time.sleep(0.4)
+        first_gap = self.timed_stop()
+        self.start()
+        time.sleep(0.1)
+        second_gap = self.timed_stop()
+
+        first, second = self.runs()
+        self.assertAlmostEqual(first["duration_ms"], first_gap, delta=50)
+        self.assertAlmostEqual(second["duration_ms"], second_gap, delta=50)
+        self.assertLess(second["duration_ms"], first["duration_ms"])
+
+    def test_parallel_runs_of_one_type_pair_by_agent_id(self):
+        self.start("a1")
+        time.sleep(0.2)
+        self.start("a2")
+        gap_a2 = self.timed_stop("a2")
+        gap_a1 = self.timed_stop("a1")
+        durations = {r["agent_id"]: r["duration_ms"] for r in self.runs()}
+        self.assertAlmostEqual(durations["a2"], gap_a2, delta=50)
+        self.assertAlmostEqual(durations["a1"], gap_a1, delta=50)
+        self.assertGreater(durations["a1"], durations["a2"])
+
+    def test_a_start_in_the_rotated_file_still_pairs(self):
+        from aspark_guard import activity
+
+        started = datetime.now(timezone.utc) - timedelta(milliseconds=250)
+        ts = started.strftime("%Y-%m-%dT%H:%M:%S.") + f"{started.microsecond // 1000:03d}Z"
+        rotated = activity.rotated_path(self.root)
+        rotated.parent.mkdir(parents=True)
+        rotated.write_text(json.dumps({"v": 1, "ts": ts, "event": "subagent_start",
+                                       "session_id": "abc123", "agent_id": "a1"}) + "\n")
+        self.stop()
+        self.assertAlmostEqual(self.runs()[0]["duration_ms"], 250, delta=50)
+
+    def test_a_stop_without_a_recorded_start_has_no_duration(self):
+        self.stop()
+        self.assertIsNone(self.runs()[0]["duration_ms"])
+
+    def test_a_start_of_another_session_does_not_pair(self):
+        self.start(session_id="other")
+        self.stop()
+        self.assertIsNone(self.runs()[0]["duration_ms"])
+
+    def test_no_stop_reason_is_recorded_even_when_the_payload_has_one(self):
+        self.start()
+        self.stop(stop_reason="end_turn")
+        self.assertNotIn("stop_reason", self.runs()[0])
+
+    def test_a_harness_internal_stop_writes_no_run(self):
+        self.hook("subagent-stop", "subagent_stop_internal.json")
+        self.assertEqual(self.runs(), [])
+
+    def test_the_trail_still_writes_with_activity_off_and_the_other_way_round(self):
+        trail_file = self.root / ".spark" / ".guard" / "trail.jsonl"
+
+        self.write_config({"activity": False})
+        self.stop()
+        self.assertTrue(trail_file.exists())
+        self.assertEqual(self.runs(), [])
+
+        trail_file.unlink()
+        self.write_config({"trail": False})
+        self.stop()
+        self.assertFalse(trail_file.exists())
+        self.assertEqual(len(self.runs()), 1)
 
 
 class TestSwitch(ActivityTestCase):
