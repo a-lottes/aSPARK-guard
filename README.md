@@ -405,9 +405,9 @@ Non-negotiable, and tested:
    `UserPromptSubmit` and `Stop`, per subagent the `Agent` launch and `SubagentStart`
    (`SubagentStop` was already hooked for the trail), plus each permission dialog and
    session end — none on ordinary tool calls. **The guard's own share per activity
-   hook, after the interpreter has started:** about 1 ms median (≤ 7 ms p95) in a project
-   with `.spark/`, 0.3 ms without one, and at most 16 ms for `SubagentStart`/`SubagentStop`
-   with the log at its 2 MB mark — measured in-process on an Intel Core i5-7360U under
+   hook, after the interpreter has started:** 1–2 ms median (≤ 8.1 ms p95) in a project
+   with `.spark/`, 0.3 ms without one, and ≤ 12.5 ms p95 (16.1 ms max) for
+   `SubagentStart`/`SubagentStop` with the log at its 2 MB mark — measured in-process on an Intel Core i5-7360U under
    load average ~6–7, `python3` 3.9.6. The process around it costs what every hook costs
    there (~170 ms median, unchanged against `main`). Commands and figures:
    [`docs/evidence.md`](docs/evidence.md) §9.
