@@ -25,8 +25,8 @@ Core is not modified. Nothing here runs unless a project has a `.spark/` directo
 
 ## Status
 
-**This is `0.1.0` — the first complete version. All six milestones are built;
-what is missing is field evidence, not mechanism.**
+**This is `0.2.0`. All six milestones are built, and 0.2.0 adds the local activity log
+(see *What it records*); what is missing is field evidence, not mechanism.**
 
 | Milestone | What it does | State |
 |---|---|---|

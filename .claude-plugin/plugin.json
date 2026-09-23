@@ -1,7 +1,7 @@
 {
   "name": "aspark-guard",
   "description": "Deterministic gate enforcement and a hash ledger for aSPARK's .spark/ artifacts. Silent in projects that don't use aSPARK.",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "author": {
     "name": "Andreas Lottes",
     "email": "andreas@lottes.dev"
