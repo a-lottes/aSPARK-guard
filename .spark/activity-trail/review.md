@@ -5,7 +5,7 @@
 | **Phase** | Review |
 | **Owner** | Reviewer (`/peer-review`) |
 | **Input** | `git diff main...feat/activity-trail` (base `208a00c`); round 3: `git diff 03fe1f5..HEAD` (T13–T17, `d653462`); `.spark/activity-trail/plan.md`, amended spec (C14–C16), `.spark/constitution.md` |
-| **Status** | `in-review` |
+| **Status** | `passed` |
 | **Round** | 3 |
 | **Date** | 2026-09-23 |
 
@@ -24,7 +24,7 @@
 **Handoff**
 - **Status:** mirrors the header table above (authoritative for `Status`).
 - **Verdict:** review gate met in round 3 — T13–T16 verified against the amended spec and the constitution, no Blocker or Major open; `passed` awaits the user's close.
-- **Open:** `none` — Blockers: none; Majors: none. F17 `fixed r3` (revert-checked); F16 `accepted` by the user (2026-09-23) as a later `/story-time` follow-up; F4, F9–F13 `accepted`.
+- **Open:** `none` — Blockers: none; Majors: none. F17 `fixed r3` (revert-checked); F16 `accepted` by the user (2026-09-23) as a later `/story-time` follow-up; F4, F9–F13 `accepted`. Gate closed `passed` by the user after round 3, 2026-09-23. Next: `/demo-day` re-test.
 - **Binding ruling:** §6 Verdict and the gate checklist below — the only binding location; there is no other round to point to
 - **On conflict:** the numbered body below wins for everything except `Status`; log the mismatch as a finding at the next `/peer-review` and proceed — don't stop on it.
 
@@ -138,4 +138,4 @@ re-review, edit this same checklist in place — never duplicate it as a second 
 - [x] All plan deviations documented and accepted — D-T1-1…5, D-T7-1, D-T8-1, the T12 ruling, F10; T13–T17 as planned (test class names only)
 - [x] Test suite runs green — 223 OK (3.13); manifest commands under 3.9.6 exit 0 with empty stderr
 - [x] Line budget respected: Ist 130 / Soll ~150 (excluding HTML comments)
-- [ ] Status set to `passed` — for the user to close
+- [x] Status set to `passed` — by the user after round 3, 2026-09-23
