@@ -340,7 +340,8 @@ def _scan(argv: list[str]) -> int:
     ]
 
     print(f"root:            {root}")
-    print(f"enabled:         {settings.enabled} (ledger={settings.ledger}, drift={settings.drift_check})")
+    print(f"enabled:         {settings.enabled} (ledger={settings.ledger}, drift={settings.drift_check}, "
+          f"activity={settings.activity})")
     print(f"artifacts:       {len(tracked)}")
     print(f"ledger entries:  {len(entries)}")
     print(f"agent runs:      {len(runs)}")

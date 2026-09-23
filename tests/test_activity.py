@@ -544,6 +544,20 @@ class TestScan(ActivityTestCase):
         self.assertIn(f"activity size:   {size} bytes", out)
         self.assertEqual(self.tree(), before, "scan is read-only")
 
+    def test_scan_shows_the_effective_activity_switch(self):
+        # QA B2: a log switched off must not look like one that silently fails.
+        cases = [(None, "activity=True"), ({"activity": False}, "activity=False"),
+                 ({"enabled": False}, "activity=False")]
+        for config, expected in cases:
+            with self.subTest(config=config):
+                if config is not None:
+                    self.write_config(config)
+                before = self.tree()
+                out = self.scan()
+                self.assertIn("enabled:", out)
+                self.assertIn(expected, out.splitlines()[1])
+                self.assertEqual(self.tree(), before)
+
     def test_scan_without_a_log_prints_zero_and_creates_nothing(self):
         before = self.tree()
         out = self.scan()
