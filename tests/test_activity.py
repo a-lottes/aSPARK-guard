@@ -552,6 +552,49 @@ class TestScan(ActivityTestCase):
         self.assertEqual(self.tree(), before)
 
 
+class TestUntypedLaunch(ActivityTestCase):
+    """QA B1: a launch without `subagent_type` still labels its start."""
+
+    def launch(self, description, subagent_type=...):
+        data = payload("pre_tool_use_task.json", self.root)
+        data["tool_input"]["description"] = description
+        if subagent_type is ...:
+            del data["tool_input"]["subagent_type"]
+        else:
+            data["tool_input"]["subagent_type"] = subagent_type
+        self.run_hook("pre-tool-use", data)
+
+    def start(self, agent_id, agent_type="general-purpose"):
+        self.hook("subagent-start", "subagent_start.json", agent_id=agent_id, agent_type=agent_type)
+        return [e for e in self.activity_entries() if e["event"] == "subagent_start"][-1]
+
+    def test_an_untyped_launch_labels_its_general_purpose_start(self):
+        for missing in (..., "", None):
+            with self.subTest(subagent_type=missing):
+                self.launch("QA single omitted", missing)
+                self.assertEqual(self.start(f"a-{missing!r}")["task"], "QA single omitted")
+
+    def test_the_pending_entry_is_parked_as_general_purpose(self):
+        from aspark_guard import activity
+
+        self.launch("parked")
+        [entry] = [json.loads(l) for l in
+                   activity.pending_path(self.root).read_text(encoding="utf-8").splitlines()]
+        self.assertEqual(entry["agent_type"], "general-purpose")
+        self.assertEqual(entry["task"], "parked")
+
+    def test_an_untyped_and_an_explicit_general_purpose_launch_are_ambiguous(self):
+        self.launch("one")
+        self.launch("two", "general-purpose")
+        self.assertIsNone(self.start("a1")["task"])
+        self.assertIsNone(self.start("a2")["task"])
+
+    def test_an_untyped_launch_is_never_claimed_by_another_type(self):
+        self.launch("mine")
+        self.assertIsNone(self.start("a1", "aspark:product-owner")["task"])
+        self.assertEqual(self.start("a2")["task"], "mine")
+
+
 class TestSwitch(ActivityTestCase):
     def test_activity_false_writes_nothing(self):
         self.write_config({"activity": False})

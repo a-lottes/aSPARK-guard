@@ -44,6 +44,8 @@ GITIGNORE_TEXT = "/.gitignore\n/activity*\n"
 # main session gave the run; SubagentStart doesn't, so the label waits in a pending
 # file for the start that follows.
 SUBAGENT_TOOL = "Agent"
+# What the harness reports on SubagentStart for a launch that named no type (QA B1).
+DEFAULT_SUBAGENT_TYPE = "general-purpose"
 TASK_MAX_CHARS = 80
 PENDING_MAX_AGE_S = 60.0
 
@@ -245,7 +247,8 @@ def record_pending_task(root: Path, event: dict) -> bool:
     entry = {
         "t": time.time(),
         "session_id": _session_id(event),
-        "agent_type": agent_type if isinstance(agent_type, str) and agent_type else None,
+        "agent_type": agent_type if isinstance(agent_type, str) and agent_type
+        else DEFAULT_SUBAGENT_TYPE,
         "task": sanitize_task(tool_input.get("description")),
     }
     return append_locked(pending_path(root), entry)

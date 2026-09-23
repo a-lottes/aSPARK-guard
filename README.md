@@ -267,6 +267,7 @@ below, which has paths masked. No path is recorded otherwise.
 - `task` is the short description the main session gave the run (from the `Agent`
   tool's launch), cleaned to one line of at most 80 characters with any absolute or
   `~/` path replaced by `<path>` — never its prompt. A resumed agent gets no label.
+  A launch that names no subagent type counts as `general-purpose`, as its start does.
   It is `null` when there is none, or when two launches of the same type are waiting
   at once and the guard can't tell which start is which.
 - `duration_ms` is measured from the latest start of that `agent_id` in the same
