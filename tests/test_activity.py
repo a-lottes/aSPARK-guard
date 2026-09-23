@@ -317,6 +317,103 @@ class TestAgentRun(ActivityTestCase):
         self.assertEqual(len(self.runs()), 1)
 
 
+class TestDoubleStop(ActivityTestCase):
+    """QA B4: one run, two SubagentStops, no start in between — the last stop wins."""
+
+    AGENT = "a71b6de9de5cbd53e"
+
+    def start(self, agent_id=AGENT):
+        self.hook("subagent-start", "subagent_start.json", agent_id=agent_id,
+                  agent_type="general-purpose")
+
+    def stop(self, agent_id=AGENT):
+        return self.hook("subagent-stop", "subagent_stop_double.json", agent_id=agent_id)
+
+    def start_ts(self) -> datetime:
+        starts = [e for e in self.activity_entries() if e["event"] == "subagent_start"]
+        return datetime.strptime(starts[-1]["ts"], "%Y-%m-%dT%H:%M:%S.%fZ").replace(
+            tzinfo=timezone.utc)
+
+    def timed_stop(self) -> float:
+        started = self.start_ts()
+        before = datetime.now(timezone.utc)
+        self.assertEqual(self.stop(), (0, ""))
+        return (before - started).total_seconds() * 1000
+
+    def runs(self) -> list[dict]:
+        return [e for e in self.activity_entries() if e["event"] == "agent_run"]
+
+    def raw_lines(self) -> list[str]:
+        return self.activity_file.read_text(encoding="utf-8").splitlines()
+
+    def test_both_finishes_are_measured_from_the_same_start(self):
+        self.start()
+        time.sleep(0.1)
+        first_gap = self.timed_stop()
+        time.sleep(0.2)
+        second_gap = self.timed_stop()
+
+        first, second = self.runs()
+        self.assertAlmostEqual(first["duration_ms"], first_gap, delta=50)
+        self.assertAlmostEqual(second["duration_ms"], second_gap, delta=50)
+        self.assertGreater(second["duration_ms"], first["duration_ms"])
+        self.assertIsNotNone(second["duration_ms"])
+
+    def test_the_first_line_is_left_as_it_was(self):
+        self.start()
+        self.stop()
+        first_line = self.raw_lines()[-1]
+        self.stop()
+        self.assertEqual(self.raw_lines()[-2], first_line)
+
+    def test_the_trail_gets_one_line_per_finish(self):
+        trail_file = self.root / ".spark" / ".guard" / "trail.jsonl"
+        self.start()
+        self.stop()
+        self.stop()
+        self.assertEqual(len(trail_file.read_text(encoding="utf-8").splitlines()), 2)
+
+    def test_two_finishes_without_a_start_both_have_no_duration(self):
+        self.stop()
+        self.stop()
+        self.assertEqual([r["duration_ms"] for r in self.runs()], [None, None])
+
+    def test_a_resume_after_a_double_stop_measures_from_its_own_start(self):
+        self.start()
+        time.sleep(0.3)
+        self.stop()
+        self.stop()
+        self.start()
+        gap = self.timed_stop()
+        last = self.runs()[-1]
+        self.assertAlmostEqual(last["duration_ms"], gap, delta=50)
+        self.assertLess(last["duration_ms"], 250)
+
+    def test_a_start_in_the_rotated_file_pairs_both_finishes(self):
+        from aspark_guard import activity
+
+        self.start()
+        activity.activity_path(self.root).replace(activity.rotated_path(self.root))
+        self.stop()
+        self.stop()
+        self.assertTrue(all(r["duration_ms"] is not None for r in self.runs()))
+        self.assertEqual(len(self.runs()), 2)
+
+    def test_a_resume_after_a_double_stop_takes_no_waiting_label(self):
+        # Review F3 still holds: the resumed agent is `seen`, the new launch is not.
+        self.start()
+        self.stop()
+        self.stop()
+        data = payload("pre_tool_use_task.json", self.root)
+        data["tool_input"].update(description="new launch", subagent_type="general-purpose")
+        self.run_hook("pre-tool-use", data)
+        self.start()
+        self.start("a-new")
+        starts = [e for e in self.activity_entries() if e["event"] == "subagent_start"]
+        self.assertIsNone(starts[-2]["task"])
+        self.assertEqual(starts[-1]["task"], "new launch")
+
+
 class TestTaskLabel(ActivityTestCase):
     def launch(self, description="Write the spec", agent_type="aspark:product-owner", **extra):
         data = payload("pre_tool_use_task.json", self.root, **extra)

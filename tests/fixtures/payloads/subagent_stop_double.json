@@ -1,0 +1,15 @@
+{
+  "session_id": "abc123",
+  "cwd": "__ROOT__",
+  "transcript_path": "__ROOT__/transcript.jsonl",
+  "prompt_id": "p-1",
+  "hook_event_name": "SubagentStop",
+  "agent_id": "a71b6de9de5cbd53e",
+  "agent_type": "general-purpose",
+  "agent_transcript_path": "__ROOT__/agent.jsonl",
+  "last_assistant_message": "LAST_MESSAGE",
+  "stop_hook_active": false,
+  "permission_mode": "default",
+  "background_tasks": [],
+  "session_crons": []
+}

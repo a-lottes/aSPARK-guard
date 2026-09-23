@@ -286,7 +286,13 @@ def _claim_task(root: Path, session_id: str | None, agent_type: str) -> str | No
 
 
 def record_agent_run(root: Path, event: dict, stopped: datetime | None = None) -> dict | None:
-    """One line per finished run, with its duration when its start is in the log.
+    """One line per finish, with its duration when its start is in the log.
+
+    The harness can report one run finished twice, with no new start in between
+    (QA B4): the subagent answers, gets another message, and carries on. Last stop
+    wins — every finish is measured from the agent's latest start, so the later line
+    carries the real length and a reader takes the latest one (AC-2.2, AC-2.8).
+    Lines already written stay as they are.
 
     No `stop_reason`: the harness doesn't send one (T1), and the guard never
     fills in a default. A stop without a recorded start gets `duration_ms: null`.
@@ -321,12 +327,14 @@ def record_agent_run(root: Path, event: dict, stopped: datetime | None = None) -
 
 
 def _scan_agent(root: Path, session_id: str | None, agent_id: str | None):
-    """(seen, open_start): whether this agent has any line in this session, and the
-    start line of its latest unfinished run, or None.
+    """(seen, start): whether this agent has any line in this session, and its
+    latest `subagent_start` line, or None.
 
     Paired from the log itself, so there is no second record to keep in step. A
-    resumed agent reuses its `agent_id` (T1), so only a start with no `agent_run`
-    after it counts. The substring check skips parsing every unrelated line.
+    resumed agent reuses its `agent_id` but brings a start of its own (T1), so the
+    latest start is the one a finish belongs to — also when an `agent_run` already
+    follows it, because the last stop wins (C14). The substring check skips parsing
+    every unrelated line.
     """
     if agent_id is None:
         return False, None
@@ -349,8 +357,6 @@ def _scan_agent(root: Path, session_id: str | None, agent_id: str | None):
                     seen = True
                     if entry.get("event") == "subagent_start":
                         opened = entry
-                    elif entry.get("event") == "agent_run":
-                        opened = None
         except OSError:
             continue
     return seen, opened
