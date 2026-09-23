@@ -15,7 +15,7 @@
      issue. -->
 
 **Handoff**
-- **Status:** `approved` — revised in place 2026-09-23 after `/demo-day` round 1 (`qa.md` failed: B4 Major; B1, B2 Minor; B3 accepted as is by the user, no task) against the spec re-approved the same day (C14–C16); revision re-approved by the user 2026-09-23. User rulings at re-approval: `v` stays 1; T17 also corrects the README's stale "142 tests" status line. T1–T12 stay `done`; T13–T17 are new. Next step: `/increment` from T13.
+- **Status:** `approved` — revised in place 2026-09-23 after `/demo-day` round 1 (`qa.md` failed: B4 Major; B1, B2 Minor; B3 accepted as is by the user, no task) against the spec re-approved the same day (C14–C16); revision re-approved by the user 2026-09-23. User rulings at re-approval: `v` stays 1; T17 also corrects the README's stale "142 tests" status line. T1–T17 all `done` (T13–T17 built 2026-09-23). Next step: `/peer-review` re-review.
 - **Summary:** New module `activity.py` appends v1 metadata-only lines to `.spark/.guard/activity.jsonl` from one subcommand per new hook. A run's duration is paired when the line is written, by scanning the log itself: **every finish pairs with its agent's latest start, so the last stop wins (C14)**. Every append and the single 2 MB rotation run under an `fcntl.flock`. A self-ignoring `.spark/.guard/.gitignore` keeps `activity*` out of git.
 - **Open:** `none` — T1–T17 done. Next: `/peer-review` (re-review of T13–T17), then `/demo-day` re-test. Carried to `/peer-review`: `EXPECTED_EVENTS` edit (ruling Q1). NFR-1 as amended (C15) is closed by T17, not by T12's deviation.
 - **Binding ruling:** §3 Task Breakdown for current task status; a plan revision after review/QA findings updates §1/§3 in place, never a new section
