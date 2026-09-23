@@ -5,7 +5,7 @@
 | **Phase** | Review |
 | **Owner** | Reviewer (`/peer-review`) |
 | **Input** | `git diff main...feat/activity-trail` (base `208a00c`, T1…T12), fix commit `4f5b665` (`git diff 07cae76..4f5b665`), `.spark/activity-trail/plan.md` |
-| **Status** | `in-review` |
+| **Status** | `passed` |
 | **Round** | 2 |
 | **Date** | 2026-09-23 |
 
@@ -24,7 +24,7 @@
 **Handoff**
 - **Status:** mirrors the header table above (authoritative for `Status`).
 - **Verdict:** review gate met in round 2 — F1–F3 fixes verified, no Blocker or Major open; `passed` awaits the user's close.
-- **Open:** `none` — Blockers: none; Majors: none (F13 Nit open; F4, F5, F9–F12 `accepted` by the user; see §3)
+- **Open:** `none` — Blockers: none; Majors: none (F4, F5, F9–F13 `accepted` by the user; see §3). Gate closed `passed` by the user, 2026-09-23. Next ceremony step: `/demo-day`.
 - **Binding ruling:** §6 Verdict and the gate checklist below — the only binding location; there is no other round to point to
 - **On conflict:** the numbered body below wins for everything except `Status`; log the mismatch as a finding at the next `/peer-review` and proceed — don't stop on it.
 
@@ -76,7 +76,7 @@
 | F10 | Nit | `src/aspark_guard/activity.py:194-196` | Starts with empty `agent_type` are skipped too; D-T1-4 documents only stops. Consistent and harmless. **Fix:** extend D-T1-4's text. | accepted |
 | F11 | Nit | `src/aspark_guard/activity.py:310-329` | Pairing reads without the lock; a rotation between reading `.1` and the current file can hide the start → `duration_ms: null` (safe direction). **Fix:** accept and note, or read under the lock. | accepted |
 | F12 | Nit | `src/aspark_guard/activity.py:170-174` | A hook killed between the `O_EXCL` create and the write leaves an empty `.gitignore` that is never repaired, and activity files then show in `git status`. **Fix:** treat an empty file as absent (rewrite via tmp + `os.replace` only when size 0). | accepted |
-| F13 | Nit | `src/aspark_guard/activity.py:217` | The r2 path mask skips a path right after `:` (so URLs survive): `file:/Users/bob/x` and Windows `C:\Users\bob` pass unmasked. The current user's home is still caught by the substring fallback (`:231`), so NFR-2 holds; only *other* users' names can leak. **Fix:** also mask `/[^\s/]+/…` after a `scheme:` that isn't followed by `//`, or accept. | open |
+| F13 | Nit | `src/aspark_guard/activity.py:217` | The r2 path mask skips a path right after `:` (so URLs survive): `file:/Users/bob/x` and Windows `C:\Users\bob` pass unmasked. The current user's home is still caught by the substring fallback (`:231`), so NFR-2 holds; only *other* users' names can leak. **Fix:** also mask `/[^\s/]+/…` after a `scheme:` that isn't followed by `//`, or accept. | accepted |
 | F14 | Minor | `README.md:405`, `README.md:416` | The r2 fix made the README's stated counts stale (1,980 lines, 206 tests vs. the measured 2,006 and 210). NFR-7 requires the measured number. Updated both. Evidence §8 is left as T12's dated record. | fixed r2 |
 
 ## 4. Requirements Traceability
@@ -130,4 +130,4 @@ re-review, edit this same checklist in place — never duplicate it as a second 
 - [x] All plan deviations documented and accepted — D-T1-1…5, D-T7-1, D-T8-1, T12 ruling; the start-side skip (F10) accepted by the user as it stands
 - [x] Test suite runs green — 210 OK (3.13), after reviewer fix F14
 - [x] Line budget respected: Ist 122 / Soll ~150 (excluding HTML comments)
-- [ ] Status set to `passed`
+- [x] Status set to `passed` (by the user, 2026-09-23)
