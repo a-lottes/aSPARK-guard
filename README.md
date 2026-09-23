@@ -285,7 +285,8 @@ a field or its meaning changes; a reader should refuse a `v` it doesn't know.
 
 **Bounded and local.** At 2 MB the file rotates to `activity.jsonl.1`, replacing the
 previous generation, so at most ~4 MB are ever on disk. Every append and rotation holds
-one lock (`activity.lock`), so parallel sessions can't break or lose lines. Next to it,
+one lock (`activity.lock`), so parallel sessions can't break or lose lines (a line
+that can't get the lock within 0.5 s is dropped, not waited for). Next to it,
 `activity.pending.jsonl` holds a launch's label until its start arrives — an
 unclaimed one is ignored after 60 s. On its first write the guard creates `.spark/.guard/.gitignore`, which
 ignores `activity*` and itself — so none of these ever shows up in `git status`, while
@@ -385,9 +386,10 @@ Non-negotiable, and tested:
    40 ms is the Python interpreter starting up, not the guard working. That cost is
    paid on every `Write`/`Edit` in every project, including ones with no `.spark/`
    directory, and it is the honest price of the current design. The activity log adds
-   hooks on 9 events in all (10 entries): per prompt `UserPromptSubmit` and `Stop`, per
-   subagent the `Agent` launch, `SubagentStart` and `SubagentStop`, plus each permission
-   dialog and session end — none on ordinary tool calls. Measured cost:
+   5 hook events and 1 matcher (9 events, 10 entries in all): per prompt
+   `UserPromptSubmit` and `Stop`, per subagent the `Agent` launch and `SubagentStart`
+   (`SubagentStop` was already hooked for the trail), plus each permission dialog and
+   session end — none on ordinary tool calls. Measured cost:
    [`docs/evidence.md`](docs/evidence.md) §8.
 4. **Never block silently.** Every denial names the rule, the state that triggered it,
    and the way forward. A block with no way out only teaches people to route around it.

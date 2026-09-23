@@ -293,8 +293,8 @@ activity work itself is ≤ 16 ms p95. The absolute bound needs a re-run on an u
 machine (the 47 ms figure in §5 came from an M-series Mac).
 
 **Added cost per unit of work, projects without `.spark/` included:** each prompt now
-pays 2 extra hook starts (`UserPromptSubmit`, `Stop`); each subagent 3 (`Agent` launch,
-`SubagentStart`, `SubagentStop`); each permission dialog and each session end 1. On this
+pays 2 extra hook starts (`UserPromptSubmit`, `Stop`); each subagent 2 (`Agent` launch,
+`SubagentStart`; `SubagentStop` was already hooked and now also runs the pairing scan); each permission dialog and each session end 1. On this
 machine that is ~200 ms per start; on the M-series figure of §5, ~50 ms.
 
 **Counts.** Full suite: **206 tests, OK** (`python3.13 -m unittest discover -s tests`;

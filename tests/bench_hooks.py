@@ -69,8 +69,8 @@ def make_project(kind: str) -> Path:
     if kind == "cap":
         log = activity.activity_path(root)
         log.parent.mkdir(parents=True, exist_ok=True)
-        # Just under the mark, with the bench agent's start buried at the top of the
-        # rotated generation: the stop's pairing scan reads both files in full.
+        # Just under the mark, with no line naming the bench agent: the stop's pairing
+        # scan reads both files in full and every line fails the substring filter.
         line = json.dumps({"v": 1, "event": "session_state", "session_id": "other",
                            "pad": "x" * 150}) + "\n"
         rotated = activity.rotated_path(root)
