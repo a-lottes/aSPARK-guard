@@ -24,7 +24,7 @@
 **Handoff**
 - **Status:** mirrors the header table above (authoritative for `Status`).
 - **Verdict:** review gate met in round 3 — T13–T16 verified against the amended spec and the constitution, no Blocker or Major open; `passed` awaits the user's close.
-- **Open:** `none` — Blockers: none; Majors: none. F17 `fixed` by `/increment` fix-mode (manifest-level test in `test_install.py`), awaiting re-review; F16 `accepted` by the user (2026-09-23) as a later `/story-time` follow-up; F4, F9–F13 `accepted`.
+- **Open:** `none` — Blockers: none; Majors: none. F17 `fixed r3` (revert-checked); F16 `accepted` by the user (2026-09-23) as a later `/story-time` follow-up; F4, F9–F13 `accepted`.
 - **Binding ruling:** §6 Verdict and the gate checklist below — the only binding location; there is no other round to point to
 - **On conflict:** the numbered body below wins for everything except `Status`; log the mismatch as a finding at the next `/peer-review` and proceed — don't stop on it.
 
@@ -40,7 +40,7 @@
   - The `cli` lens (hook carve-out) was checked against `scan`'s changed output.
   - NFR-1 is judged as amended (C15): no numeric bar, measured and labelled.
 - **Run by me, r3:**
-  - Suite under 3.13 → **222 tests OK**.
+  - Suite under 3.13 → **223 tests OK** (after the F17 test).
   - Under `/usr/bin/python3` 3.9.6 with `PATH=/usr/bin:/bin`, through the `hooks.json` command lines: untyped `Agent` launch → `SubagentStart` → two `SubagentStop`. Each exits 0 with empty stdout and stderr. The start gets `task: "untyped"`; both runs are measured from the same start (335, 675 ms).
   - `scan` under 3.9 with `{"activity": false}` → `activity=False`, exit 0, empty stderr.
   - `wc -l src/aspark_guard/*.py` → 2,016, matching the README.
@@ -88,7 +88,7 @@
 | F14 | Minor | `README.md` counts | Line and test counts went stale after r2. | fixed r2 |
 | F15 | Minor | `README.md:408-410` | The r3 cost sentence said "about 1 ms median (≤ 7 ms p95)" with `.spark/`, but evidence §9 shows `subagent-stop` at 2.3 ms median and 8.1 ms p95. Constitution §4 (docs honesty) and principle 4 require stated numbers to match their source. Corrected to "1–2 ms median (≤ 8.1 ms p95)" and "≤ 12.5 ms p95 (16.1 ms max)" at the cap. | fixed r3 |
 | F16 | Minor | `src/aspark_guard/cli.py:320-322` (`_scan`), `bin/guard.py` | The `cli` lens binds `scan` in full. The line T16 changed conforms: results go to stdout, there is no colour or prompt, and exit is 0. Three pre-existing gaps are not from this diff: `guard.py scan --help` treats `--help` as a path and silently scans the cwd's root; there is no `--version`; and there is no machine-readable mode, although `scan` is NFR-5's only observability surface and T16 just changed its format. **Fix:** route to a `/story-time` follow-up for `scan`/`check` ergonomics (at least `--help`, and treating an unknown flag as an error on stderr). Not this feature's scope. | accepted |
-| F17 | Minor | `tests/test_install.py` (`TestInstalledCopyRuns`) | Constitution §4 says a change on a hook path adds tests in all three layers. T13 and T15 add behaviour tests only, and the existing fail-open tests cover hostile input. No hook-contract test drives the double stop or the untyped launch through the manifest command line; that ran once by hand (evidence §9, and my r3 run). **Fix:** one `run_hook_command` case: `Agent` without type → `SubagentStart` → two `SubagentStop`. Assert exit 0, empty stderr, the label, and two non-null `duration_ms`. | fixed |
+| F17 | Minor | `tests/test_install.py` (`TestInstalledCopyRuns`) | Constitution §4 says a change on a hook path adds tests in all three layers. T13 and T15 add behaviour tests only, and the existing fail-open tests cover hostile input. No hook-contract test drives the double stop or the untyped launch through the manifest command line; that ran once by hand (evidence §9, and my r3 run). Fixed by `test_an_untyped_launch_and_a_double_stop_through_the_real_command_lines`. Revert-checked in a worktree: fails with r2's `activity.py` (`None != 'untyped'`, B1) and with only the `agent_run` reset restored (B4). | fixed r3 |
 
 ## 4. Requirements Traceability
 
@@ -118,12 +118,12 @@
 - [x] Non-functional: NFR-1 as amended, and NFR-2/4/5/6/7, hold. Constitution §6 non-negotiables are unaffected by r3.
 - [x] Error handling: failures are handled, not swallowed (fail-open on POSIX, constitution §6.2)
 - [x] Security: no injected input trusted, no secrets; no payload content logged
-- [x] Tests: exist, are meaningful, and pass (222 OK); every new test fails on the r2 code. Three-layer gap: F17.
+- [x] Tests: exist, are meaningful, and pass (223 OK); every new test fails on the r2 code, the F17 manifest test included.
 - [x] Readability: the next developer will understand this
 
 ## 6. Verdict
 
-The gate is met in round 3. B4 is fixed as the amended spec asks ("last stop wins"). Every finish now pairs with the agent's latest start. A double stop gives two measured lines with no `null`. Lines already written stay unchanged, and the trail keeps one line per finish. A resume that brings its own start measures only itself, and F3's label protection still holds after a double stop. I confirmed all of this in tests that fail on the r2 code, and once through the manifest under Python 3.9. B1 (the untyped launch's label) and B2 (`scan` showing the effective switch) are fixed and tested. NFR-1, as amended, is now measured and labelled with its commands, so F5 is closed. I found no violation of the constitution's non-negotiables. I corrected one misstated cost figure in the README (F15). Two Minors stay open and do not block. F16 is three pre-existing `cli`-lens gaps on `scan` that belong to a follow-up feature. F17 is a missing manifest-level test that constitution §4's three-layer rule asks for. No Blocker or Major is open. The user's earlier `passed` does not carry over a changed diff, so Status is `in-review` until the user closes the gate.
+The gate is met in round 3. B4 is fixed as the amended spec asks ("last stop wins"). Every finish now pairs with the agent's latest start. A double stop gives two measured lines with no `null`. Lines already written stay unchanged, and the trail keeps one line per finish. A resume that brings its own start measures only itself, and F3's label protection still holds after a double stop. I confirmed all of this in tests that fail on the r2 code, and once through the manifest under Python 3.9. B1 (the untyped launch's label) and B2 (`scan` showing the effective switch) are fixed and tested. NFR-1, as amended, is now measured and labelled with its commands, so F5 is closed. I found no violation of the constitution's non-negotiables. I corrected one misstated cost figure in the README (F15). F16, three pre-existing `cli`-lens gaps on `scan`, is accepted by the user as a later follow-up. F17, the missing manifest-level test, is fixed and revert-checked. No Blocker or Major is open. The user's earlier `passed` does not carry over a changed diff, so Status is `in-review` until the user closes the gate.
 
 ---
 
@@ -136,6 +136,6 @@ re-review, edit this same checklist in place — never duplicate it as a second 
 - [x] No open Major findings (or explicitly waived by the user, with reason recorded here) — none open; B4's fix verified
 - [x] Every Must AC traces to implementing code; no constitution non-negotiable violated — incl. amended AC-2.2/2.3/2.4/2.7 and new AC-2.8
 - [x] All plan deviations documented and accepted — D-T1-1…5, D-T7-1, D-T8-1, the T12 ruling, F10; T13–T17 as planned (test class names only)
-- [x] Test suite runs green — 222 OK (3.13); manifest commands under 3.9.6 exit 0 with empty stderr
+- [x] Test suite runs green — 223 OK (3.13); manifest commands under 3.9.6 exit 0 with empty stderr
 - [x] Line budget respected: Ist 130 / Soll ~150 (excluding HTML comments)
 - [ ] Status set to `passed` — for the user to close
