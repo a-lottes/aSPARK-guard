@@ -165,6 +165,35 @@ class TestInstalledCopyRuns(GuardTestCase):
         self.assertEqual([e.get("state") for e in events[:4]], ["busy", "idle", "waiting", "ended"])
         self.assertEqual(events[4]["event"], "subagent_start")
 
+    def test_an_untyped_launch_and_a_double_stop_through_the_real_command_lines(self):
+        # Review F17 (constitution §4): QA B1 and B4 driven through the manifest itself.
+        manifest = json.loads(MANIFEST.read_text(encoding="utf-8"))
+        agent_matcher = next(e for e in manifest["hooks"]["PreToolUse"] if e["matcher"] == "Agent")
+        launch_command = agent_matcher["hooks"][0]["command"].replace(
+            "${CLAUDE_PLUGIN_ROOT}", str(self.plugin_root))
+        base = {"cwd": str(self.project), "session_id": "s1"}
+        launch = subprocess.run(
+            launch_command, shell=True, capture_output=True, text=True, timeout=30,
+            cwd=str(self.project),
+            input=json.dumps({**base, "tool_name": "Agent", "tool_input": {"description": "untyped"}}),
+        )
+        self.assertEqual((launch.returncode, launch.stdout, launch.stderr), (0, "", ""))
+
+        agent = {**base, "agent_id": "a1", "agent_type": "general-purpose"}
+        for event in ("SubagentStart", "SubagentStop", "SubagentStop"):
+            with self.subTest(event=event):
+                result = self.run_hook_command(event, agent)
+                self.assertEqual((result.returncode, result.stdout, result.stderr), (0, "", ""))
+
+        log = self.project / ".spark" / ".guard" / "activity.jsonl"
+        events = [json.loads(line) for line in log.read_text(encoding="utf-8").splitlines()]
+        [start] = [e for e in events if e["event"] == "subagent_start"]
+        runs = [e for e in events if e["event"] == "agent_run"]
+        self.assertEqual(start["task"], "untyped")
+        self.assertEqual(len(runs), 2)
+        self.assertTrue(all(isinstance(r["duration_ms"], int) for r in runs))
+        self.assertLessEqual(runs[0]["duration_ms"], runs[1]["duration_ms"])
+
     def test_a_fresh_install_needs_no_setup_at_all(self):
         # No config file, no directories created by hand, no build step: the first
         # write must simply be recorded.

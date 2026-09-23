@@ -37,7 +37,7 @@ what is missing is field evidence, not mechanism.**
 | **M4** Template validator + trail | Form drift reported as context, never blocked; one trail line per finished subagent | **Built** |
 | **M5** Release | Installation proven from the manifest's own command lines; full-cycle test; `docs/evidence.md` | **Built** |
 
-Both guarantees hold for the three rules below, proven by the test suite (222 tests today) and replayed over
+Both guarantees hold for the three rules below, proven by the test suite (223 tests today) and replayed over
 22 real gated artifacts without a false positive. Installed from the marketplace and
 verified working on 2026-09-11 — see [`docs/evidence.md`](docs/evidence.md) §4.
 
@@ -431,7 +431,7 @@ once and isn't any more). The only subprocess it ever spawns is `git rev-parse -
 python3 -m unittest discover -s tests -t tests
 ```
 
-222 tests, no dependencies, no network, no Claude Code required. Three layers:
+223 tests, no dependencies, no network, no Claude Code required. Three layers:
 
 - **Behaviour against fixtures** — one artifact state per fixture: draft, approved,
   uninstantiated template, broken header table.
