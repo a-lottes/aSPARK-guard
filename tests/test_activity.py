@@ -265,6 +265,25 @@ class TestAgentRun(ActivityTestCase):
         self.stop()
         self.assertAlmostEqual(self.runs()[0]["duration_ms"], 250, delta=50)
 
+    def test_a_run_keeps_the_feature_its_start_was_given(self):
+        # Review F1: the first run of a feature starts before any artifact exists,
+        # then writes the spec. Its finish must not re-infer a different feature.
+        self.start()
+        spec = self.write_fixture_artifact(".spark/weekly-stats/spec.md", "spec_draft.md")
+        self.post_tool_use(spec, session_id="abc123")
+        self.stop()
+
+        [start] = [e for e in self.activity_entries() if e["event"] == "subagent_start"]
+        [run] = self.runs()
+        self.assertIsNone(start["feature"])
+        self.assertEqual(run["feature"], start["feature"])
+
+    def test_a_run_without_a_recorded_start_infers_its_feature(self):
+        spec = self.write_fixture_artifact(".spark/weekly-stats/spec.md", "spec_draft.md")
+        self.post_tool_use(spec, session_id="abc123")
+        self.stop()
+        self.assertEqual(self.runs()[0]["feature"], "weekly-stats")
+
     def test_a_stop_without_a_recorded_start_has_no_duration(self):
         self.stop()
         self.assertIsNone(self.runs()[0]["duration_ms"])
@@ -350,6 +369,30 @@ class TestTaskLabel(ActivityTestCase):
         entry["t"] -= 61
         pending.write_text(json.dumps(entry) + "\n", encoding="utf-8")
         self.assertIsNone(self.start()["task"])
+
+    def test_paths_in_the_label_are_masked(self):
+        # Review F2: the label is free text; a path would carry a user name into the log.
+        home = str(Path.home())
+        self.launch(f"Review {home}/proj/app.py, ~/notes.md and /etc/hosts via /peer-review")
+        task = self.start()["task"]
+        self.assertEqual(task, "Review <path> <path> and <path> via /peer-review")
+        self.assertNotIn(home, task)
+
+    def test_a_resumed_agent_does_not_take_a_waiting_launchs_label(self):
+        # Review F3: a resume fires a start with no launch before it. A same-type
+        # launch parked meanwhile belongs to the new agent, not to the resumed one.
+        self.launch("first run")
+        self.start("a1")
+        self.stop_run("a1")
+        self.launch("second agent")
+        resumed = self.start("a1")
+        fresh = self.start("a2")
+        self.assertIsNone(resumed["task"])
+        self.assertEqual(fresh["task"], "second agent")
+
+    def stop_run(self, agent_id):
+        self.run_hook("subagent-stop", {"session_id": "abc123", "cwd": str(self.root),
+                                        "agent_id": agent_id, "agent_type": "aspark:product-owner"})
 
     def test_a_launch_of_another_session_is_not_used(self):
         self.launch(session_id="other")

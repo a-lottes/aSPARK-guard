@@ -247,7 +247,8 @@ What the team is doing right now, so a read-only cockpit can show it from the pr
 alone: whether each session is busy, idle, waiting or ended, and which subagents are
 running and for how long. **Metadata only, never content** — no prompt, tool input,
 tool output, message or thinking is written; every value is an id the harness assigned,
-a timestamp, or drawn from a fixed list. Paths aren't recorded at all.
+a timestamp, or drawn from a fixed list — the one exception is the short `task` label
+below, which has paths masked. No path is recorded otherwise.
 
 ```json
 {"v":1,"ts":"2026-09-22T10:00:00.123Z","event":"session_state","session_id":"abc123","state":"busy","reason":"prompt"}
@@ -264,7 +265,8 @@ a timestamp, or drawn from a fixed list. Paths aren't recorded at all.
 | `agent_run` | `SubagentStop` | `agent_id`, `agent_type`, `feature`, `duration_ms` |
 
 - `task` is the short description the main session gave the run (from the `Agent`
-  tool's launch), cleaned to one line of at most 80 characters — never its prompt.
+  tool's launch), cleaned to one line of at most 80 characters with any absolute or
+  `~/` path replaced by `<path>` — never its prompt. A resumed agent gets no label.
   It is `null` when there is none, or when two launches of the same type are waiting
   at once and the guard can't tell which start is which.
 - `duration_ms` is measured from the latest unfinished start of that `agent_id` in the

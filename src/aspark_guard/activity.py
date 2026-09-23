@@ -18,6 +18,7 @@ from __future__ import annotations
 import fcntl
 import json
 import os
+import re
 import time
 import unicodedata
 from contextlib import contextmanager
@@ -194,24 +195,41 @@ def record_subagent_start(root: Path, event: dict) -> dict | None:
     agent_type = _agent_type(event)
     if agent_type is None:
         return None
+    session_id = _session_id(event)
+    agent_id = _agent_id(event)
+    # A resume fires a new start with no launch before it (T1). It must not take a
+    # label parked for someone else's launch, so only a first start claims one.
+    seen, _ = _scan_agent(root, session_id, agent_id)
     return record(
         root,
         "subagent_start",
         event,
-        agent_id=_agent_id(event),
+        agent_id=agent_id,
         agent_type=agent_type,
-        feature=trail.feature_for_session(root, _session_id(event)),
-        task=_claim_task(root, _session_id(event), agent_type),
+        feature=trail.feature_for_session(root, session_id),
+        task=None if seen else _claim_task(root, session_id, agent_type),
     )
+
+
+# An absolute path (two or more segments, so a slash command like "/peer-review"
+# stays readable) or a home-relative one. The label is free text the model wrote,
+# and a path in it would carry a user name into the log.
+_PATH_TOKEN = re.compile(r"(?<![\w.:/])(?:~/\S*|/[^\s/]+/\S*)")
+PATH_PLACEHOLDER = "<path>"
 
 
 def sanitize_task(value) -> str | None:
     """The label as a single short line: no control characters, whitespace collapsed,
-    at most TASK_MAX_CHARS. Anything that isn't a non-empty string is None."""
+    paths replaced, at most TASK_MAX_CHARS. Anything that isn't a non-empty string is
+    None."""
     if not isinstance(value, str):
         return None
     kept = "".join(" " if unicodedata.category(ch).startswith("C") else ch for ch in value)
-    collapsed = " ".join(kept.split())
+    masked = _PATH_TOKEN.sub(PATH_PLACEHOLDER, kept)
+    home = str(Path.home())
+    if len(home) > 1:  # a home path glued to other text, which the token rule misses
+        masked = masked.replace(home, PATH_PLACEHOLDER)
+    collapsed = " ".join(masked.split())
     return collapsed[:TASK_MAX_CHARS].rstrip() or None
 
 
@@ -281,31 +299,38 @@ def record_agent_run(root: Path, event: dict, stopped: datetime | None = None) -
         return None
     session_id = _session_id(event)
     agent_id = _agent_id(event)
-    started = _open_start(root, session_id, agent_id)
+    _, start = _scan_agent(root, session_id, agent_id)
     duration_ms = None
+    started = _parse_ts(start.get("ts")) if start else None
     if started is not None:
         elapsed = stopped - started
         duration_ms = max(0, int(elapsed.total_seconds() * 1000))
+    # A run keeps the feature its start was given (AC-2.2): the subagent may well
+    # have written the session's first artifact in between, which would change the
+    # inference. Only a run without a recorded start is inferred here.
+    feature = start.get("feature") if start else trail.feature_for_session(root, session_id)
     return record(
         root,
         "agent_run",
         event,
         agent_id=agent_id,
         agent_type=agent_type,
-        feature=trail.feature_for_session(root, session_id),
+        feature=feature,
         duration_ms=duration_ms,
     )
 
 
-def _open_start(root: Path, session_id: str | None, agent_id: str | None):
-    """When the latest unfinished run of this agent started, or None.
+def _scan_agent(root: Path, session_id: str | None, agent_id: str | None):
+    """(seen, open_start): whether this agent has any line in this session, and the
+    start line of its latest unfinished run, or None.
 
     Paired from the log itself, so there is no second record to keep in step. A
     resumed agent reuses its `agent_id` (T1), so only a start with no `agent_run`
     after it counts. The substring check skips parsing every unrelated line.
     """
     if agent_id is None:
-        return None
+        return False, None
+    seen = False
     opened = None
     for path in (rotated_path(root), activity_path(root)):
         try:
@@ -321,13 +346,14 @@ def _open_start(root: Path, session_id: str | None, agent_id: str | None):
                         continue
                     if entry.get("agent_id") != agent_id or entry.get("session_id") != session_id:
                         continue
+                    seen = True
                     if entry.get("event") == "subagent_start":
-                        opened = entry.get("ts")
+                        opened = entry
                     elif entry.get("event") == "agent_run":
                         opened = None
         except OSError:
             continue
-    return _parse_ts(opened)
+    return seen, opened
 
 
 def _parse_ts(value) -> datetime | None:
