@@ -5,7 +5,7 @@
 | **Phase** | Keep |
 | **Owner** | Release Manager (`/go-live`) |
 | **Input** | `review.md` (`passed`, round 3), `qa.md` (`passed`, round 2) |
-| **Status** | `preparing` |
+| **Status** | `released` |
 | **Version** | v0.2.0 |
 | **Date** | 2026-09-23 |
 
@@ -16,8 +16,8 @@
 
 **Handoff**
 - **Status:** mirrors the header table above (authoritative for `Status` and `Version`).
-- **Summary:** v0.2.0 adds the local, metadata-only activity log (session state, subagent runs with duration and label). Pre-flight is green; the release commit and local tag `v0.2.0` are prepared on `feat/activity-trail`. Nothing has been pushed.
-- **Open:** `1 outstanding`: the user's go for fast-forwarding `main` and pushing `main` plus `v0.2.0`. Pushing `main` publishes to every marketplace user. Then the smoke check (§3).
+- **Summary:** v0.2.0 adds the local, metadata-only activity log (session state, subagent runs with duration and label). Released 2026-09-23 on the user's explicit go: `main` fast-forwarded and pushed together with tag `v0.2.0` (both at `8279c43`); the smoke check against the marketplace install is green.
+- **Open:** `none`. Follow-ups for `/story-time` in §4.
 - **Binding ruling:** §3 Release Actions and the KEEP GATE below carry the final ruling.
 - **On conflict:** the numbered body below wins for everything except `Status`/`Version`; log the mismatch as a finding at the next `/go-live` and proceed. Don't stop on it.
 
@@ -58,9 +58,9 @@
 | Action | Result |
 |---|---|
 | Version bump & tag | 0.1.0 → 0.2.0 in `.claude-plugin/plugin.json` and the README status line; `CHANGELOG.md` added. Release commit on `feat/activity-trail`, plus a local annotated tag `v0.2.0` on it. **Not pushed.** Minor bump: new hooks, a new log file and a config key, all additive. Ledger, trail, config and the rules are unchanged, so nothing breaks |
-| PR / merge | **Pending go.** Direct mode: `git checkout main && git merge --ff-only feat/activity-trail` (linear history, `origin/main` = merge base `208a00c`) |
-| Deploy | **Pending go.** `git push origin main v0.2.0`. The aSPARK marketplace sources `a-lottes/aSPARK-guard` with no pinned ref, so this push is the publish |
-| Post-release smoke check | **Pending.** `claude plugin marketplace update aspark`, then `claude plugin update aspark-guard@aspark`, then `claude plugin list` shows 0.2.0. One prompt in a throwaway `.spark/` repo writes `session_state` lines; `scan` shows `activity=True`; a repo without `.spark/` stays empty |
+| PR / merge | **Done.** Direct mode: `git checkout main && git merge --ff-only feat/activity-trail` → `main` at `8279c43`. Run by the orchestrator on the user's go, after the permission check had stopped the release agent's own attempt. Feature branch kept local (user) |
+| Deploy | **Done.** `git push origin main v0.2.0` → `208a00c..8279c43 main -> main`, `[new tag] v0.2.0`. Verified with `git ls-remote`: `refs/heads/main` and `refs/tags/v0.2.0^{}` at `8279c43`. The marketplace sources this repo unpinned, so this push was the publish |
+| Post-release smoke check | **Green.** `claude plugin marketplace update aspark` ✔; `claude plugin update aspark-guard@aspark` → "updated from 0.1.0 to 0.2.0"; `claude plugin list` → 0.2.0, enabled. Installed copy (no `--plugin-dir`), `claude -p` in a throwaway `.spark/` repo → `busy/prompt`, `idle/stop`, `ended/other`; `scan` → `activity=True`, 3 lines; `git status --porcelain` empty. Repo without `.spark/` → nothing created |
 | Rollback path | **Before the push:** `git tag -d v0.2.0 && git reset --hard 9641cf3` on the branch; `main` is untouched. **After the push:** on `main`, run `git restore --source=208a00c -- bin src hooks tests README.md docs`. Set `plugin.json` to 0.2.1 and add a `CHANGELOG.md` line "0.2.1 restores 0.1.0 behaviour". Commit, then `git push origin main`. Users get the 0.1.0 code under 0.2.1, and `.spark/` artifacts stay. Never force-push `main` or delete a pushed tag. **Per project, no release needed:** `.spark/guard.json` `{"activity": false}` |
 
 ## 4. Learnings (Keep!)
@@ -76,7 +76,7 @@
 
 - [x] All pre-flight checks passed at release time
 - [x] Changelog written in user-facing language
-- [ ] Release actions executed and verified (or `aborted` with reason): push, merge and smoke check await the user's go
+- [x] Release actions executed and verified (or `aborted` with reason): merge, push and smoke check done 2026-09-23
 - [x] Learnings recorded
 - [x] Line budget respected: Ist 75 / Soll ~100 (excluding HTML comments)
-- [ ] Status set to `released`: `preparing` until the go and the smoke check
+- [x] Status set to `released` (2026-09-23)
