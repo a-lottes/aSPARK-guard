@@ -5,7 +5,7 @@
 | **Phase** | Review (hands-on) |
 | **Owner** | QA Tester (`/demo-day`) |
 | **Input** | Declared method (constitution §8), `.spark/activity-trail/spec.md` |
-| **Status** | `in-testing` |
+| **Status** | `passed` |
 | **Round** | 2 |
 | **Date** | 2026-09-23 |
 
@@ -15,7 +15,7 @@
      per-round log; a stale block is a defect, not a cosmetic issue. -->
 
 **Handoff**
-- **Status:** `in-testing` — round 2 complete: every AC, QA-owned NFR and success signal verified and passed at `ead7f16`, including B4's double stop seen live (I4). Awaiting the user's gate decision; the tester does not set `passed`.
+- **Status:** `passed` — round 2 complete: every AC, QA-owned NFR and success signal verified and passed at `ead7f16`, including B4's double stop seen live (I4). Gate closed `passed` by the user, 2026-09-23. Next: `/go-live`.
 - **Verdict:** demo-ready: I would demo this now.
 - **Open:** `none` — B1, B2, B4 `fixed r2`; B3 `accepted` by the user.
 - **Binding ruling:** §5 Verdict and the gate checklist below — the only binding location; there is no other round to point to
@@ -101,4 +101,4 @@ Would I demo this now? Yes. B4 was seen live again in I4, in the same way as rou
 - [x] Hook stderr free of errors on the tested flows (no browser console, §8)
 - [x] Tested on all agreed viewports: N/A (§8, no browser surface); headless and interactive sessions both run
 - [x] Line budget respected: Ist 101 / Soll ~130 (excluding HTML comments)
-- [ ] Status set to `passed`
+- [x] Status set to `passed` (by the user, 2026-09-23)
