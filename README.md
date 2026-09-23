@@ -402,7 +402,7 @@ Non-negotiable, and tested:
 Point 6 is not aesthetics. Plugin hooks **bypass the workspace-trust prompt**, so this
 code runs on other people's machines unasked. It stays standard-library-only and
 readable in one sitting so that it can be audited by the people it runs for:
-**1,980 lines** in `src/aspark_guard/` (`wc -l`, 2026-09-22; it was "under a thousand"
+**2,006 lines** in `src/aspark_guard/` (`wc -l`, 2026-09-23; it was "under a thousand"
 once and isn't any more). The only subprocess it ever spawns is `git rev-parse --short HEAD`.
 
 ---
@@ -413,7 +413,7 @@ once and isn't any more). The only subprocess it ever spawns is `git rev-parse -
 python3 -m unittest discover -s tests -t tests
 ```
 
-206 tests, no dependencies, no network, no Claude Code required. Three layers:
+210 tests, no dependencies, no network, no Claude Code required. Three layers:
 
 - **Behaviour against fixtures** — one artifact state per fixture: draft, approved,
   uninstantiated template, broken header table.
