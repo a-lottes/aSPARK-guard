@@ -37,7 +37,7 @@ what is missing is field evidence, not mechanism.**
 | **M4** Template validator + trail | Form drift reported as context, never blocked; one trail line per finished subagent | **Built** |
 | **M5** Release | Installation proven from the manifest's own command lines; full-cycle test; `docs/evidence.md` | **Built** |
 
-Both guarantees hold for the three rules below, proven by 142 tests and replayed over
+Both guarantees hold for the three rules below, proven by the test suite (222 tests today) and replayed over
 22 real gated artifacts without a false positive. Installed from the marketplace and
 verified working on 2026-09-11 — see [`docs/evidence.md`](docs/evidence.md) §4.
 
@@ -404,8 +404,13 @@ Non-negotiable, and tested:
    5 hook events and 1 matcher (9 events, 10 entries in all): per prompt
    `UserPromptSubmit` and `Stop`, per subagent the `Agent` launch and `SubagentStart`
    (`SubagentStop` was already hooked for the trail), plus each permission dialog and
-   session end — none on ordinary tool calls. Measured cost:
-   [`docs/evidence.md`](docs/evidence.md) §8.
+   session end — none on ordinary tool calls. **The guard's own share per activity
+   hook, after the interpreter has started:** about 1 ms median (≤ 7 ms p95) in a project
+   with `.spark/`, 0.3 ms without one, and at most 16 ms for `SubagentStart`/`SubagentStop`
+   with the log at its 2 MB mark — measured in-process on an Intel Core i5-7360U under
+   load average ~6–7, `python3` 3.9.6. The process around it costs what every hook costs
+   there (~170 ms median, unchanged against `main`). Commands and figures:
+   [`docs/evidence.md`](docs/evidence.md) §9.
 4. **Never block silently.** Every denial names the rule, the state that triggered it,
    and the way forward. A block with no way out only teaches people to route around it.
 5. **State and form only, never quality.** Anything requiring judgment belongs to the
@@ -415,7 +420,7 @@ Non-negotiable, and tested:
 Point 6 is not aesthetics. Plugin hooks **bypass the workspace-trust prompt**, so this
 code runs on other people's machines unasked. It stays standard-library-only and
 readable in one sitting so that it can be audited by the people it runs for:
-**2,006 lines** in `src/aspark_guard/` (`wc -l`, 2026-09-23; it was "under a thousand"
+**2,016 lines** in `src/aspark_guard/` (`wc -l`, 2026-09-23; it was "under a thousand"
 once and isn't any more). The only subprocess it ever spawns is `git rev-parse --short HEAD`.
 
 ---
@@ -426,7 +431,7 @@ once and isn't any more). The only subprocess it ever spawns is `git rev-parse -
 python3 -m unittest discover -s tests -t tests
 ```
 
-210 tests, no dependencies, no network, no Claude Code required. Three layers:
+222 tests, no dependencies, no network, no Claude Code required. Three layers:
 
 - **Behaviour against fixtures** — one artifact state per fixture: draft, approved,
   uninstantiated template, broken header table.

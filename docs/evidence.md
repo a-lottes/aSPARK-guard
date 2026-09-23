@@ -301,3 +301,76 @@ machine that is ~200 ms per start; on the M-series figure of §5, ~50 ms.
 the suite needs ≥ 3.10, see plan D-T1-5). `wc -l src/aspark_guard/*.py` → **1,980**
 lines, as stated in the README. The only edited existing assertion is `EXPECTED_EVENTS`
 in `tests/test_install.py` (plan ruling Q1).
+
+---
+
+## 9. Activity-trail cost after the QA revision (T17, 2026-09-23)
+
+Closes NFR-1 as amended (spec C15, constitution: no numeric bar; measured and labelled).
+Machine: Intel Core i5-7360U (2 cores), macOS, load average ~5.5–7 during the runs.
+Hooks run under `/usr/bin/python3` 3.9.6. Code: branch `feat/activity-trail` after T13–T16.
+
+**The guard's own share, in-process** (handler only, after import; the cap row seeds the
+2 MB mark with real-shaped lines and puts the bench agent's start, run, run at the top of
+the rotated file, so `subagent-stop` scans both generations in full):
+
+```bash
+/usr/bin/python3 tests/bench_hooks.py inproc 50
+```
+
+```
+50 runs per row · in-process · /Library/Developer/CommandLineTools/usr/bin/python3 (3.9.6)
+
+-- project: spark
+  user-prompt-submit               median    0.9  p95    5.4  max    8.5  ms
+  stop                             median    0.9  p95    3.9  max    4.3  ms
+  permission-request               median    0.9  p95    4.0  max    4.4  ms
+  session-end                      median    0.9  p95    4.1  max    4.9  ms
+  subagent-start                   median    1.4  p95    5.3  max    7.0  ms
+  subagent-stop                    median    2.3  p95    8.1  max   19.1  ms
+  pre-tool-use (Agent)             median    0.9  p95    6.9  max    8.1  ms
+
+-- project: none
+  user-prompt-submit               median    0.3  p95    2.1  max    6.7  ms
+  stop                             median    0.3  p95    1.9  max    2.6  ms
+  permission-request               median    0.3  p95    0.9  max    2.5  ms
+  session-end                      median    0.3  p95    0.8  max    5.2  ms
+  subagent-start                   median    0.3  p95    0.5  max    1.0  ms
+  subagent-stop                    median    0.3  p95    1.3  max    4.7  ms
+  pre-tool-use (Agent)             median    0.3  p95    0.6  max    4.7  ms
+
+-- project: cap
+  user-prompt-submit               median    1.0  p95    4.1  max    6.2  ms
+  stop                             median    0.9  p95    5.0  max    7.2  ms
+  permission-request               median    0.9  p95    5.1  max    7.0  ms
+  session-end                      median    1.0  p95    5.1  max    9.4  ms
+  subagent-start                   median    7.7  p95   11.9  max   12.8  ms
+  subagent-stop                    median    9.9  p95   12.5  max   16.1  ms
+  pre-tool-use (Agent)             median    0.9  p95    6.2  max   15.4  ms
+```
+
+**Gate hooks, this tree vs `main`, alternated so both share the load:**
+
+```bash
+git worktree add <dir> main && /usr/bin/python3 tests/bench_hooks.py compare <dir> 60 /usr/bin/python3
+```
+
+```
+60 alternating runs per row · /usr/bin/python3 · other = <worktree of main at 208a00c>
+
+  post-tool-use (Write)    other  median  174.2  p95  247.0  max  570.9  ms
+  post-tool-use (Write)    this   median  170.5  p95  309.1  max  372.9  ms
+  pre-tool-use (Write)     other  median  168.2  p95  231.9  max  309.7  ms
+  pre-tool-use (Write)     this   median  165.8  p95  226.0  max  530.6  ms
+```
+
+No regression beyond noise (medians within 4 ms). Every hook stays far below the 5 s
+manifest timeout (worst single invocation in §8 and here: 682 ms, under load 105).
+
+**Python 3.9 through the manifest.** `subagent-start`, `pre-tool-use` (Agent) and two
+`subagent-stop` for one run were run through their `hooks/hooks.json` command lines with
+`PATH=/usr/bin:/bin` (so `python3` is 3.9.6): exit 0, empty stdout and stderr, and the two
+finishes carried `duration_ms` 1163 and 1867 from the same start — last stop wins (C14).
+
+**Counts.** Full suite: **222 tests, OK** (`python3.13 -m unittest discover -s tests`).
+`wc -l src/aspark_guard/*.py` → **2,016** lines, as stated in the README.
