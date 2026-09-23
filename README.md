@@ -269,8 +269,9 @@ below, which has paths masked. No path is recorded otherwise.
   `~/` path replaced by `<path>` — never its prompt. A resumed agent gets no label.
   It is `null` when there is none, or when two launches of the same type are waiting
   at once and the guard can't tell which start is which.
-- `duration_ms` is measured from the latest unfinished start of that `agent_id` in the
-  same session, so a resumed agent gets the length of its latest run only. `null` when
+- `duration_ms` is measured from the latest start of that `agent_id` in the same
+  session, for every finish after that start — so a resumed agent, which brings a start
+  of its own, gets the length of its latest run only. It is `null` for every finish when
   the start isn't in the log. There is no `stop_reason`: the harness doesn't send one,
   and the guard doesn't make one up. The trail above is unchanged.
 - `feature` is the same inference the trail makes, and `null` before the session has
@@ -282,8 +283,19 @@ stay on after you have answered**, until the session's next recorded event. A qu
 Claude asks you (`AskUserQuestion`) is not shown as `waiting`; only a permission dialog
 is. Only facts are written: **a session with no `ended` line may have been killed**, and
 a subagent start with no `agent_run` is over if its session ended — deciding when a
-silent session counts as stale is up to the reader. `v` goes up whenever an event name,
-a field or its meaning changes; a reader should refuse a `v` it doesn't know.
+silent session counts as stale is up to the reader.
+
+**A run can finish more than once.** Claude Code sometimes reports one subagent run as
+finished, sends it another message, and reports it finished again — with no new start
+in between. Each report gets its own `agent_run` line, and lines already written are
+never changed. **The authoritative finish is the latest `agent_run` with the same
+`session_id` and `agent_id` after that agent's latest `subagent_start`.** So a run can
+briefly show as finished before a later `agent_run` corrects its duration, and the trail
+then holds one line per finish. This rule holds for every `v: 1` file, including those
+already on disk; `v` stays 1.
+
+`v` goes up whenever an event name, a field or its meaning changes; a reader should
+refuse a `v` it doesn't know.
 
 **Bounded and local.** At 2 MB the file rotates to `activity.jsonl.1`, replacing the
 previous generation, so at most ~4 MB are ever on disk. Every append and rotation holds
