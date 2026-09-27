@@ -41,9 +41,8 @@ Both guarantees hold for the three rules below, proven by the test suite (223 te
 22 real gated artifacts without a false positive. Installed from the marketplace and
 verified working on 2026-09-11 — see [`docs/evidence.md`](docs/evidence.md) §4.
 
-**The one gap that matters:** none of this has run a full feature loop on a project that
-isn't this author's — the same gap aSPARK Core names at the top of its own roadmap, for
-the same reason. Only a real run shows whether a rule fires where it should *and* stays
+**The one gap that matters:** there is no public, checkable report yet of a full feature
+loop with the guard on a project other than this author's. Only a real run shows whether a rule fires where it should *and* stays
 quiet where it shouldn't. [`docs/evidence.md`](docs/evidence.md) is the complete account
 of what has and has not been exercised.
 
@@ -482,8 +481,8 @@ src/aspark_guard/
   rotation.
 - **`waiting` is coarse.** It comes from permission dialogs only, and can outlive your
   answer until the session's next hooked event (see *What it records*).
-- **Not proven in a real project yet.** Everything above is tested; none of it has run a
-  full feature loop on someone else's repo. [`docs/evidence.md`](docs/evidence.md) lists
+- **No public field report yet.** Everything above is tested; there is no public report
+  yet of a full feature loop on someone else's repo. [`docs/evidence.md`](docs/evidence.md) lists
   exactly what has and has not been exercised.
 
 ---
