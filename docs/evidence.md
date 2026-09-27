@@ -166,9 +166,9 @@ for anyone who decides not to install this.
 
 ## 6. What is not proven
 
-- **No full loop on a project that is not this author's.** Same gap aSPARK Core names
-  at the top of its own roadmap, for the same reason: only a real run tells you whether
-  a rule fires where it should and stays quiet where it shouldn't.
+- **No public full-loop report from a project that is not this author's.** Only a real
+  run tells you whether a rule fires where it should and stays quiet where it shouldn't;
+  a field report is what would show it.
 - **No Windows.** The hook command is `python3 …`; nothing here has run on Windows.
 - **No concurrent sessions.** Two agents writing `.spark/` at once would both append to
   the ledger. POSIX append should keep whole lines intact; that has not been tested.
