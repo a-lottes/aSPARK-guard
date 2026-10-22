@@ -97,6 +97,8 @@ Every one of these is a decision, not an oversight — and each is tested:
   of every consumer: "a suffixed or renamed value silently drops the finding from every
   open-findings view". Real artifacts carry severities like `Blocker → superseded` and
   statuses like `fixed r6, reconfirmed r8`; neither is open.
+- **Writes that go through `Bash`.** This one is a gap, not a decision: R1–R3 see
+  `Write` and `Edit`, not a shell command that writes the same file. See *Known limits*.
 
 ---
 
@@ -469,6 +471,11 @@ src/aspark_guard/
   the activity log's lock uses `fcntl`, which Windows doesn't have.
 - **A determined route around it exists** and always will: a hook cannot distinguish
   "the agent decided this" from "the user dictated it". See *Overriding a gate*.
+- **Writes through `Bash` are not gated.** The rules run on `Write`/`Edit` only. If a
+  write to `plan.md` is denied, the agent can still produce the file with `cat >`,
+  `sed -i`, `cp` or `mv`, and nothing blocks it. The ledger's drift check reports the
+  changed artifact at the next session start, so it is detected, but late, and not
+  prevented. Tracked in [#2](https://github.com/a-lottes/aSPARK-guard/issues/2).
 - **The ledger is only as honest as the repo.** Nothing stops a force-push. Integrity
   here rests on git, not on the guard.
 - **~50 ms on every `Write`/`Edit`, everywhere** — including repos with no `.spark/`
