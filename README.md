@@ -25,8 +25,10 @@ Core is not modified. Nothing here runs unless a project has a `.spark/` directo
 
 ## Status
 
-**This is `0.2.0`. All six milestones are built, and 0.2.0 adds the local activity log
-(see *What it records*); what is missing is field evidence, not mechanism.**
+**This is `0.3.0`. All six milestones are built, 0.2.0 added the local activity log
+(see *What it records*), and 0.3.0 adds a fourth rule that holds code back until a plan
+is approved (see *Code waits for an approved plan*); what is missing is field evidence,
+not mechanism.**
 
 | Milestone | What it does | State |
 |---|---|---|
@@ -37,8 +39,10 @@ Core is not modified. Nothing here runs unless a project has a `.spark/` directo
 | **M4** Template validator + trail | Form drift reported as context, never blocked; one trail line per finished subagent | **Built** |
 | **M5** Release | Installation proven from the manifest's own command lines; full-cycle test; `docs/evidence.md` | **Built** |
 
-Both guarantees hold for the three rules below, proven by the test suite (223 tests today) and replayed over
-22 real gated artifacts without a false positive. Installed from the marketplace and
+Both guarantees hold for the three rules below, proven by the test suite (247 tests today) and replayed over
+22 real gated artifacts without a false positive. The fourth rule, new in 0.3.0, is
+tested but has **not** been replayed over real history; see
+[`docs/evidence.md`](docs/evidence.md) §10. Installed from the marketplace and
 verified working on 2026-09-11 — see [`docs/evidence.md`](docs/evidence.md) §4.
 
 **The one gap that matters:** there is no public, checkable report yet of a full feature
@@ -89,9 +93,9 @@ Every one of these is a decision, not an oversight — and each is tested:
 - **An unreadable status.** No parseable header table means no fact to act on.
 - **An abort record.** A `release.md` written with status `aborted` passes over red
   gates. Refusing it would block the one artifact that documents why nothing shipped.
-- **Anything outside the three gated artifacts** — `spec.md` and `review.md` are inputs
-  to a gate, never subject to one; so are evidence notes, the constitution, and all your
-  source code.
+- **Any other file under `.spark/`** — `spec.md` and `review.md` are inputs to a gate,
+  never subject to one; so are evidence notes and the constitution. Source code is
+  subject to one rule only, described next.
 - **Severity or status wording the template doesn't define.** A Blocker counts as open
   only when its status cell is exactly `open`, which is what the QA template requires
   of every consumer: "a suffixed or renamed value silently drops the finding from every
@@ -99,6 +103,44 @@ Every one of these is a decision, not an oversight — and each is tested:
   statuses like `fixed r6, reconfirmed r8`; neither is open.
 - **Writes that go through `Bash`.** This one is a gap, not a decision: R1–R3 see
   `Write` and `Edit`, not a shell command that writes the same file. See *Known limits*.
+
+### Code waits for an approved plan
+
+New in 0.3.0. aSPARK's loop says the plan is approved before the build starts. Measured
+on real agent runs, that instruction alone did not hold: sessions started with `/spark`
+wrote code within the first 15 to 25 seconds, before any plan existed. This rule makes
+the order structural.
+
+| Rule | A write to… | is denied while… |
+|---|---|---|
+| `code-requires-approved-plan` | any file outside `.spark/` | this session wrote a `spec.md` or `plan.md`, and no feature it wrote for has an `approved` plan |
+
+It has two scopes, set with `"plan_first_scope"` in `.spark/guard.json`:
+
+- **`"session"` (default).** Only a session that itself wrote a spec or a plan is held,
+  and only until one of the features it wrote for has an approved plan. The fact comes
+  from the ledger, not from which ceremony is running. A session that never touched a
+  trail is never held, so a hotfix, a refactoring or any work outside the loop stays
+  free. A feature that already has a `review.md`, `qa.md` or `release.md` counts as past
+  planning.
+- **`"always"` (opt-in).** Every code write in the project is denied unless some feature
+  has an approved plan and no `release.md` yet. This is the only form that also catches
+  code written **before any spec exists**, which is what the measured sessions did. It
+  holds every session in the project, including ones that are not running a loop, so it
+  fits a project where all work goes through aSPARK (an autonomous line, for example)
+  and little else.
+
+Three ways to switch it off or narrow it:
+
+- `"code-requires-approved-plan": "warn"` or `"off"` under `"rules"`.
+- `"plan_first_exempt": ["docs/*", "*.md"]`: `fnmatch` patterns, relative to the repo
+  root, that the rule never holds.
+- In `"session"` scope, a human override line like for every other gate (see below). It
+  is bound to the hash of the spec or plan that caused the block. The `"always"` scope
+  has no artifact to bind an override to; use the config there.
+
+As with every rule: an unreadable plan status is no fact to act on, so nothing is
+blocked; and a write through `Bash` is not seen at all (see *Known limits*).
 
 ---
 
@@ -380,8 +422,11 @@ Optional, at `.spark/guard.json`. Absent or malformed means these defaults:
     "plan-requires-approved-spec":  "block",
     "qa-requires-passed-review":    "block",
     "release-requires-green-gates": "block",
-    "overrides-are-human-only":     "block"
-  }
+    "overrides-are-human-only":     "block",
+    "code-requires-approved-plan":  "block"
+  },
+  "plan_first_scope": "session",  // "session" | "always"
+  "plan_first_exempt": []         // fnmatch patterns, relative to the repo root
 }
 ```
 
@@ -421,7 +466,7 @@ Non-negotiable, and tested:
 Point 6 is not aesthetics. Plugin hooks **bypass the workspace-trust prompt**, so this
 code runs on other people's machines unasked. It stays standard-library-only and
 readable in one sitting so that it can be audited by the people it runs for:
-**2,016 lines** in `src/aspark_guard/` (`wc -l`, 2026-09-23; it was "under a thousand"
+**2,189 lines** in `src/aspark_guard/` (`wc -l`, 2026-11-12; it was "under a thousand"
 once and isn't any more). The only subprocess it ever spawns is `git rev-parse --short HEAD`.
 
 ---
@@ -432,7 +477,7 @@ once and isn't any more). The only subprocess it ever spawns is `git rev-parse -
 python3 -m unittest discover -s tests -t tests
 ```
 
-223 tests, no dependencies, no network, no Claude Code required. Three layers:
+247 tests, no dependencies, no network, no Claude Code required. Three layers:
 
 - **Behaviour against fixtures** — one artifact state per fixture: draft, approved,
   uninstantiated template, broken header table.
@@ -471,7 +516,12 @@ src/aspark_guard/
   the activity log's lock uses `fcntl`, which Windows doesn't have.
 - **A determined route around it exists** and always will: a hook cannot distinguish
   "the agent decided this" from "the user dictated it". See *Overriding a gate*.
-- **Writes through `Bash` are not gated.** The rules run on `Write`/`Edit` only. If a
+- **In its default scope, `code-requires-approved-plan` does not see code written before
+  any spec exists.** It starts to hold once the session has written a spec or plan. A
+  session that skips the trail entirely and writes code first is only caught with
+  `"plan_first_scope": "always"`.
+- **Writes through `Bash` are not gated.** The rules run on `Write`/`Edit` only. That
+  includes the code rule: `cat > src/app.py` passes. If a
   write to `plan.md` is denied, the agent can still produce the file with `cat >`,
   `sed -i`, `cp` or `mv`, and nothing blocks it. The ledger's drift check reports the
   changed artifact at the next session start, so it is detected, but late, and not

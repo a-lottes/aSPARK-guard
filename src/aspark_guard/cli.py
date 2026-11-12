@@ -127,7 +127,14 @@ def handle_pre_tool_use(event: dict) -> int:
         return 0
 
     settings = config.load(root)
-    violation = rules.evaluate(root, target, _incoming_content(event))
+    if artifacts.relative_to_root(target, root) is None:
+        return 0
+    if artifacts.is_spark_artifact(target, root) or artifacts.is_guard_own_file(target, root):
+        violation = rules.evaluate(root, target, _incoming_content(event))
+    elif settings.rule_mode(rules.R_CODE) == "off":
+        return 0
+    else:
+        violation = _code_write_violation(root, target, event, settings)
     if violation is None:
         return 0
 
@@ -141,6 +148,18 @@ def handle_pre_tool_use(event: dict) -> int:
     else:
         _note(message)
     return 0
+
+
+def _code_write_violation(root: Path, target: Path, event: dict, settings):
+    """R5 on a write outside `.spark/`, minus what a human override settles."""
+    session_id = event.get("session_id")
+    violation = rules.evaluate_code_write(
+        root, target, session_id if isinstance(session_id, str) else None,
+        scope=settings.plan_first_scope, exempt=settings.plan_first_exempt,
+    )
+    if violation is None or violation.feature is None:
+        return violation
+    return violation if rules.uncovered(root, violation) else None
 
 
 def _park_task_label(event: dict) -> int:
