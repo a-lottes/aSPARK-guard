@@ -25,7 +25,9 @@ import re
 from dataclasses import dataclass
 from pathlib import Path
 
-from . import artifacts, overrides
+from fnmatch import fnmatch
+
+from . import artifacts, ledger, overrides
 
 # Artifact file names as aSPARK Core instantiates them (constitution §5).
 SPEC = "spec.md"
@@ -38,8 +40,14 @@ R_PLAN = "plan-requires-approved-spec"
 R_QA = "qa-requires-passed-review"
 R_RELEASE = "release-requires-green-gates"
 R_OVERRIDE = "overrides-are-human-only"
+R_CODE = "code-requires-approved-plan"
 
-ALL_RULES = (R_PLAN, R_QA, R_RELEASE, R_OVERRIDE)
+ALL_RULES = (R_PLAN, R_QA, R_RELEASE, R_OVERRIDE, R_CODE)
+
+# R5 scopes. "session": only a session that itself started a loop is held to it.
+# "always": the project decided that code changes only under an approved plan.
+SCOPE_SESSION = "session"
+SCOPE_ALWAYS = "always"
 GATED_ARTIFACTS = (PLAN, QA, RELEASE)
 
 # A release that records an abort is a legitimate write over red gates — refusing it
@@ -303,3 +311,129 @@ def pending(root: Path, feature: str) -> list[Violation]:
         if violation is not None:
             found.append(violation)
     return found
+
+
+# --- R5: code waits for an approved plan --------------------------------------
+#
+# Unlike R1-R3 the target here is not a `.spark/` artifact, so there is no path to
+# read the feature from. The rule takes it from the ledger instead: which features
+# did *this session* write a spec or plan for? That is a fact on disk, not a guess
+# about which ceremony is running.
+
+
+def _later_artifact_exists(root: Path, feature: str) -> bool:
+    return any(_artifact_path(root, feature, name).is_file() for name in (REVIEW, QA, RELEASE))
+
+
+def _plan_trigger(root: Path, feature: str) -> Trigger | None:
+    """Why this feature's plan does not yet allow code, or None if it does (or is unreadable)."""
+    plan = _artifact_path(root, feature, PLAN)
+    if plan.is_file():
+        return _trigger_if_not(root, feature, PLAN, "approved")
+    spec = _artifact_path(root, feature, SPEC)
+    if not spec.is_file():
+        return None
+    return Trigger(
+        artifact=SPEC,
+        detail=f"{artifacts.SPARK_DIR}/{feature}/{SPEC} has no {PLAN} beside it yet",
+        sha256=artifacts.sha256_file(spec),
+    )
+
+
+def session_features(root: Path, session_id: str | None) -> list[str]:
+    """Features whose spec or plan this session wrote, in first-write order."""
+    if not isinstance(session_id, str) or not session_id:
+        return []
+    found: list[str] = []
+    for entry in ledger.read_entries(root):
+        if entry.get("session_id") != session_id:
+            continue
+        feature = entry.get("feature")
+        path = entry.get("path")
+        if not isinstance(feature, str) or not isinstance(path, str):
+            continue
+        if path.rsplit("/", 1)[-1] not in (SPEC, PLAN):
+            continue
+        if feature not in found:
+            found.append(feature)
+    return found
+
+
+def _all_features(root: Path) -> list[str]:
+    spark = Path(root) / artifacts.SPARK_DIR
+    try:
+        return sorted(
+            child.name for child in spark.iterdir()
+            if child.is_dir() and child.name != artifacts.GUARD_DIR
+        )
+    except OSError:
+        return []
+
+
+def _is_exempt(rel: str, exempt) -> bool:
+    return any(isinstance(pattern, str) and fnmatch(rel, pattern) for pattern in exempt or ())
+
+
+def evaluate_code_write(root: Path, target: Path, session_id: str | None,
+                        scope: str = SCOPE_SESSION, exempt=()) -> Violation | None:
+    """The violation a write to a file *outside* `.spark/` would commit, or None.
+
+    "session" scope: this session wrote a spec or plan, and none of the features it
+    wrote for has an approved plan yet. A session that never touched a trail is never
+    held, and neither is one that is building a feature whose plan is approved while
+    it drafts the next one.
+
+    "always" scope: no feature in the project has an approved plan that is still
+    unreleased. This is the only form that also catches code written before any
+    spec exists, and it is opt-in because it holds every session in the project.
+    """
+    rel = artifacts.relative_to_root(target, root)
+    if rel is None or rel.startswith(f"{artifacts.SPARK_DIR}/") or _is_exempt(rel, exempt):
+        return None
+
+    if scope == SCOPE_ALWAYS:
+        features = _all_features(root)
+        for feature in features:
+            if (_status_of(root, feature, PLAN) == "approved"
+                    and not _artifact_path(root, feature, RELEASE).is_file()):
+                return None
+        # Unreadable plans are facts the guard does not have: stay out of the way.
+        for feature in features:
+            plan = _artifact_path(root, feature, PLAN)
+            if plan.is_file() and _status_of(root, feature, PLAN) is None:
+                return None
+        return Violation(
+            rule_id=R_CODE,
+            headline="this project allows code changes only under an approved plan.",
+            triggers=(Trigger(
+                artifact=PLAN,
+                detail=f"no feature under {artifacts.SPARK_DIR}/ has an approved, unreleased {PLAN}",
+                sha256=None,
+            ),),
+            remedy=f"Take a feature to an approved {PLAN} first (/story-time, then "
+                   f"/sprint-plan), then write code.",
+            feature=None,
+        )
+
+    features = session_features(root, session_id)
+    if not features:
+        return None
+
+    blocking: list[tuple[str, Trigger]] = []
+    for feature in features:
+        if _later_artifact_exists(root, feature):
+            return None  # past planning: review, QA or release already exist
+        trigger = _plan_trigger(root, feature)
+        if trigger is None:
+            return None  # an approved (or unreadable) plan this session works under
+        blocking.append((feature, trigger))
+
+    feature, trigger = blocking[0]
+    return Violation(
+        rule_id=R_CODE,
+        headline="code may not be written while the plan of the feature this session "
+                 "started is not approved.",
+        triggers=(trigger,),
+        remedy=f"Close the gate first: get {PLAN} to `approved` (/sprint-plan), then build.",
+        feature=feature,
+    )

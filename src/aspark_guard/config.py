@@ -18,7 +18,10 @@ DEFAULT_RULES = {
     "qa-requires-passed-review": "block",
     "release-requires-green-gates": "block",
     "overrides-are-human-only": "block",
+    "code-requires-approved-plan": "block",
 }
+
+PLAN_FIRST_SCOPES = ("session", "always")
 
 DEFAULTS = {
     "enabled": True,
@@ -27,6 +30,11 @@ DEFAULTS = {
     "trail": True,
     "activity": True,
     "template_check": True,
+    # code-requires-approved-plan: "session" holds only a session that wrote a spec
+    # or plan itself; "always" holds every code write in the project.
+    "plan_first_scope": "session",
+    # fnmatch patterns, relative to the repo root, that the rule never holds.
+    "plan_first_exempt": [],
     "rules": DEFAULT_RULES,
 }
 
@@ -68,6 +76,18 @@ class Config:
     @property
     def template_check(self) -> bool:
         return self.enabled and bool(self._data["template_check"])
+
+    @property
+    def plan_first_scope(self) -> str:
+        value = self._data["plan_first_scope"]
+        return value if value in PLAN_FIRST_SCOPES else "session"
+
+    @property
+    def plan_first_exempt(self) -> tuple:
+        value = self._data["plan_first_exempt"]
+        if not isinstance(value, list):
+            return ()
+        return tuple(item for item in value if isinstance(item, str))
 
     def rule_mode(self, rule_id: str) -> str:
         if not self.enabled:

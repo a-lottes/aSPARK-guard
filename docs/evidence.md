@@ -374,3 +374,51 @@ finishes carried `duration_ms` 1163 and 1867 from the same start — last stop w
 
 **Counts.** Full suite: **222 tests, OK** (`python3.13 -m unittest discover -s tests`).
 `wc -l src/aspark_guard/*.py` → **2,016** lines, as stated in the README.
+
+---
+
+## 10. `code-requires-approved-plan` (0.3.0, 2026-11-12)
+
+Machine: Linux x86_64 cloud container, Python 3.13.18 for the suite, CPython 3.9.25 for
+the manifest check. Not a Mac and not a Claude Code session.
+
+**Why the rule exists.** In measurement runs of the aSPARK loop on a real repo, sessions
+started with `/spark` wrote code within the first 15 to 25 seconds, before a plan
+existed. Prompt material did not hold the order; a second, enforced planning session
+did. That finding comes from the runs' transcripts, not from this repo.
+
+**What was run.**
+
+```bash
+python3 -m unittest discover -s tests -t tests     # 247 tests, OK
+```
+
+24 of them are new (`tests/test_plan_first.py`): the session scope, modes, exemptions
+and overrides, the `always` scope, and silence and fail-open for the new path.
+
+**Python 3.9 through the manifest.** With a `python3` that is CPython 3.9.25 first on
+`PATH`, the `hooks/hooks.json` command lines were run in a throwaway `.spark/` repo:
+`post-tool-use` for a `Write` of `.spark/feat/spec.md` (exit 0, silent), then
+`pre-tool-use` for an `Edit` of `src/app.py` in the same session: exit 0 and a `deny`
+decision naming `code-requires-approved-plan` and "spec.md has no plan.md beside it
+yet". The same `Edit` from another session id: exit 0, silent. The same `Edit` in a
+directory without `.spark/`: exit 0, silent, no file created.
+
+**What is not proven.**
+
+- **No replay over real history.** The constitution asks that a gate rule ship only
+  after `guard.py check` over a real project's history shows no block. `check` replays
+  `.spark/` artifact states; this rule's subject is a code write, which the ledger does
+  not record, so there is nothing to replay. The rule therefore ships on tests and on
+  the reasoning that the `session` scope only holds a session that started a loop
+  itself. Whether it stays quiet where it should needs a real loop with the rule on.
+  Shipping it as `block` rather than `warn` is the maintainer's decision at merge.
+- **No live Claude Code session.** The decision JSON has the shape the other rules
+  use, which is proven live for them (§4); this rule has not been seen denying a write
+  in a real session.
+- **`Bash` writes pass**, as for every rule (README, *Known limits*).
+- **Code written before any spec exists passes in the default scope.** Only
+  `"plan_first_scope": "always"` catches it.
+
+**Counts.** Full suite: **247 tests, OK**. `wc -l src/aspark_guard/*.py` → **2,189**
+lines, as stated in the README.
